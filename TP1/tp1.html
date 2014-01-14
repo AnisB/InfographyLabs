@@ -1,0 +1,50 @@
+<html><head><script type="text/javascript">
+function clamp( x ){
+    return x<0 ? 0 : x>1 ? 1 : x;
+}
+
+// do some basic tonemapping for gamma correction, and map [0,1] radiance values to 8-bit output pixel values
+function gammaCorrectToInt( x ) {
+    return Math.floor( Math.pow( clamp( x ), 1/2.2 ) * 255 + 0.5 );
+}
+
+function main() {
+    var wlh = window.location.href;
+    var iog = wlh.indexOf("#");
+    var argv = iog > 0 ? wlh.slice(iog + 1).split(",") : [];
+
+    // parse URL "command-line"
+    var width = argv[0] ? argv[0] : 512, height = argv[1] ? argv[1] : 512;
+    var image = new Float32Array(3 * width * height);
+    for (var y = 0; y < height; y++) { // loop over rows
+        for (var x = 0; x < width; x++) { // loop over columns
+            var pixel_index = (height - y - 1) * width + x;
+            
+            image[3 * pixel_index + 0] = y / height;
+            image[3 * pixel_index + 1] = 0;
+            image[3 * pixel_index + 2] = x / width;
+
+        }
+    }
+
+    // Create an HTML canvas element to house our image...
+    var canvas = document.createElement( "canvas" );
+    canvas.width = width;
+    canvas.height = height;
+    document.body.appendChild( canvas );
+
+    // ... and get access to all of its data context
+    var context2D = canvas.getContext("2d");
+    var imgData = context2D.getImageData(0, 0, width, height);
+
+    // populate image data
+    for(var i = 0, j = 0, k = 0; i < width * height; i++){
+        imgData.data[ j++ ] = gammaCorrectToInt( image[k++] );
+        imgData.data[ j++ ] = gammaCorrectToInt( image[k++] );
+        imgData.data[ j++ ] = gammaCorrectToInt( image[k++] );
+        imgData.data[ j++ ] = 255; // alpha = 1, always
+    }
+
+    context2D.putImageData(imgData, 0, 0);
+}
+</script></head><body onload="main();"></body></html>
