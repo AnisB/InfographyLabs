@@ -1,0 +1,286 @@
+
+<html>
+<head>
+<title>TP1 Partie2 Anis Benyoub</title>
+<!-- Import de la lib de math glMatrix -->
+<!-- Cette librarie provient de https://code.google.com/p/glmatrix/ -->
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+
+<script type="text/javascript">
+
+// Constantes
+var PI = 3.14159265359;
+var EPSILON = 0.000001;
+
+// Données de la scene
+var primitives = [];
+var backgroundColor = [1, 1, 1];
+var lightDir = [-10, 4, 10];
+vec3.normalize(lightDir);
+var LightIntensity = PI;
+
+// Données camera
+var width = 512.0;
+var height = 384.0;
+var ratio = width/height;
+var angleView = 29.5;
+var focalDistance = 50;
+var cameraPos = [50 , 52, 296];
+var cameraDirection = [0, -0.043, -1];
+
+
+
+
+function printToPage(name, vec)
+{
+    var mytext = name +vec.toString();
+    document.writeln(mytext);
+}
+
+// Fonction de traitement des vec32
+function scale( x,y )
+{
+    return [x[0]*y, x[1]*y, x[2]*y];
+}
+
+function addV( x,y )
+{
+    return [x[0]+y[0], x[1]+y[1], x[2]+y[2]];
+}
+
+function dot( x,y )
+{
+    return x[0]*y[0]+ x[1]*y[1]+ x[2]*y[2];
+}
+
+function substract( x,y )
+{
+    return [x[0]-y[0], x[1]-y[1], x[2]-y[2]];
+}
+// Conversion de float à int pour les couleurs
+function FloatToInt( x ) 
+{
+    return x * 255;
+}
+// Affecte la couleur d'un pixel
+function SetPixelColor(parImage, parColor, parWidth, parHeight)
+{
+    var pixel_index = ( parHeight - 1) * width + parWidth;
+    parImage[3 * pixel_index + 0] = parColor[0];
+    parImage[3 * pixel_index + 1] = parColor[1];
+    parImage[3 * pixel_index + 2] = parColor[2];
+}
+// Intersection avec une sphère
+function IntersectSphere(parRayon, parSphere)
+{
+    // Donnée d'intersection
+    var intersect = [];
+    intersect.isValid = false;
+    // Données de l'equation de second degrès 
+    var A = dot(parRayon.direction,parRayon.direction);
+    var B = 2*dot(substract(parRayon.origin,parSphere.centre),parRayon.direction);
+    var C = dot(substract(parRayon.origin,parSphere.centre),substract(parRayon.origin,parSphere.centre)) - parSphere.rayon*parSphere.rayon;
+    
+    // Calcul du determinant
+    var delta = B*B-4*A*C;
+    // test positif
+    if(delta<-EPSILON)
+    {
+        return intersect
+    }
+    //resultat nul
+    else if(delta==0)
+    {   
+        var t = -B/2.0*A; 
+        if(t>0)
+        {
+            intersect.isValid = true;
+            intersect.distance = t;
+            intersect.colorVal = parSphere.colorVal;
+        }
+    }
+    // Delta non nul
+    else
+    {
+        // Les deux solutions
+        var t1 = (-B - Math.sqrt(delta))/(2*A);
+        var t2 = (-B + Math.sqrt(delta))/(2*A);
+        // On garde le minimum positif
+        var finalt = Infinity;
+        if (t1 > 0)
+            finalt = Math.min(finalt, t1);
+        if (t2 > 0)
+            finalt = Math.min(finalt, t2);
+        intersect.distance = finalt;
+        if(finalt>EPSILON && finalt!=Infinity)
+        {
+            // On défini l'intersection
+            intersect.isValid = true;
+            intersect.colorVal = parSphere.colorVal;
+            intersect.position = addV(parRayon.origin,scale(parRayon.direction,finalt));
+            intersect.normal = substract(intersect.position,parSphere.centre);
+            vec3.normalize(intersect.normal);
+        }
+    }
+    return intersect;
+}
+function ComputeLight(parIntersect)
+{
+    // On calcule la lumière
+    return scale(parIntersect.colorVal, Math.max(dot(parIntersect.normal,lightDir))*LightIntensity/PI);
+}
+function IntersectWithScene(parRayon)
+{
+    // On intersecte avec tous les objets de la scene
+    var finalIntersect = [];
+    finalIntersect.distance = Infinity;
+    finalIntersect.normal = [1, 0,0];
+    finalIntersect.isValid = false;
+    for (var index = 0; index < primitives.length; ++index) 
+    {
+        var intersection = IntersectSphere(parRayon, primitives[index]);
+        // Est valide?
+        if(intersection.isValid)
+        {
+            // On garde la plus petite
+            if(intersection.distance<finalIntersect.distance)
+            {
+                finalIntersect = intersection;
+            }
+        }
+    }
+    // La contribution lumineuse
+    var color;
+    if(finalIntersect.isValid)
+    {
+        color = ComputeLight(finalIntersect);
+        // ON crée le ryon secondaire
+        var Rayon = [];
+        Rayon.origin = finalIntersect.position;
+        Rayon.direction = lightDir;
+        vec3.normalize(Rayon.direction);
+        // On lance le rayon
+        color=scale(color, IntersectToLight(Rayon));
+    }
+    else
+    {
+        color = backgroundColor;
+    }
+    return color;
+}
+
+function IntersectToLight(parRayon)
+{
+    // On intersecte avec tout les objets de la peine
+    for (var index = 0; index < primitives.length; ++index) 
+    {
+        var intersection = IntersectSphere(parRayon, primitives[index]);
+        if(intersection.isValid)
+        {
+            return 0.5;
+        }
+    }
+    return 1.0;
+
+}
+
+function initScene()
+{
+    // On crée les objets de la scene
+    var sphere1 =[];
+    sphere1.rayon = 40;
+    sphere1.centre = [50, 40, 0];
+    sphere1.colorVal = [0.3, 0.5, 0.75];
+    primitives.push(sphere1);
+
+    var sphere2 =[];
+    sphere2.rayon = 100000;
+    sphere2.centre = [80, -100000, 0];
+    sphere2.colorVal = [0.75, 0.75, 0.75];
+    primitives.push(sphere2);
+}
+function main() 
+{
+    // On crée la scene
+    initScene();
+    // Vecteur avant de la camera
+    var zDir = vec3.create();
+    zDir= vec3.normalize(cameraDirection);
+
+    // On défini le centre de l'ecran
+    var dirVec = [0,0,0];
+    vec3.scale(zDir, focalDistance, dirVec);
+    var centreEcran = [0, 0, 0];
+    vec3.add(cameraPos, dirVec, centreEcran);
+
+    // La hauteur de l'ecran
+    var hauteurEcran = Math.tan(angleView*3.14/(2.0*180))*focalDistance;
+
+    // Les deux vecteurs de l'ecran X et Y
+    var yDir  = [0, 0, 0];
+    vec3.cross(zDir,[1.0, 0.0, 0.0],yDir);
+    vec3.normalize(yDir);
+
+    var xDir = [0,0,0];
+    vec3.cross(yDir,zDir,xDir);
+    vec3.normalize(xDir);
+
+    // Coin supérieur gauche
+    var pointGauche = [0,0,0];
+    vec3.subtract(centreEcran, scale(yDir,hauteurEcran),pointGauche);
+    var coinSupGauche = vec3.subtract(pointGauche, scale(xDir,hauteurEcran*ratio));
+
+    var unitX = (2.0*hauteurEcran/height);
+    var unitY = (2.0*hauteurEcran/width*ratio);
+    // Pour chacun des pixels
+    var image = new Float32Array(3 * width * height);
+    for (var x = 0; x < width; x++) 
+    {
+        for (var y = 0; y < height; y++) 
+        {
+            var ydis = scale(yDir,y*unitX);
+            var xdis = scale(xDir,x*unitY);
+
+            var displacement = addV(xdis,ydis);
+            var point = addV(coinSupGauche,displacement);
+            
+            var direction = substract(point,cameraPos);
+            // On crée le rayon associé
+            var Rayon = [];
+            Rayon.origin = point;
+            Rayon.direction = direction;
+            vec3.normalize(Rayon.direction);
+            //Intersection avec la scene
+            var color = IntersectWithScene(Rayon);
+            SetPixelColor(image, color, x, y);
+        }
+    }
+
+    // Création du canvas
+    var canvas = document.createElement( "canvas" );
+    canvas.width = width;
+    canvas.height = height;
+    document.body.appendChild( canvas );
+
+    // Contexte  graphique
+    var context2D = canvas.getContext("2d");
+    var imgData = context2D.getImageData(0, 0, width, height);
+
+    // Conversion en int
+    for(var i = 0, j = 0, k = 0; i < width * height; i++)
+    {
+        imgData.data[ j++ ] = FloatToInt( image[k++] );
+        imgData.data[ j++ ] = FloatToInt( image[k++] );
+        imgData.data[ j++ ] = FloatToInt( image[k++] );
+        imgData.data[ j++ ] = 255; // alpha = 1, always
+    }
+    // Affichage du resultat
+    context2D.putImageData(imgData, 0, 0);
+}
+</script>
+</head>
+
+<body onload="main();">
+</body>
+
+</html>

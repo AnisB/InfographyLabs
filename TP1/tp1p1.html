@@ -1,7 +1,7 @@
 
 <html>
 <head>
-<title>TP1 Anis Benyoub</title>
+<title>TP1 Partie1 Anis Benyoub</title>
 <!-- Import de la lib de math glMatrix -->
 <!-- Cette librarie provient de https://code.google.com/p/glmatrix/ -->
 <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
@@ -178,7 +178,7 @@
     function placeCamera()
     {
         // On définie la matrice de projection
-        mat4.perspective(29.5, gl.viewportWidth / gl.viewportHeight, 0.1, 500.0, projectionMatrix);
+        mat4.perspective(29.5, gl.viewportWidth / gl.viewportHeight, 0.1, 10000.0, projectionMatrix);
         // On définie la matrice de vue
         mat4.lookAt([50, 52, 296], [50, -0.043+52, -1+296], [0, 1,0], viewMatrix);
     }
@@ -242,7 +242,7 @@
         gl.uniform3fv(shaderProgram.colorUniform, parSphere.colorVal);
     }
 
-    function createSphere(parRadius, parPosition, parColorVal, parTesselation, parIsInternal)
+    function createSphere(parRadius, parPosition, parColorVal, parTesselation)
     {
         // Données de sphere
         var sphere = [];
@@ -268,18 +268,9 @@
                 var u = 1- (longNumber / parTesselation);
                 var v = latNumber / parTesselation;
                 // Si la sphère est gérée de manière interne (necessité d'éclairage)
-                if(parIsInternal)
-                {
-                    normalData.push(-x);
-                    normalData.push(-y);
-                    normalData.push(-z);               
-                }
-                else
-                {
-                    normalData.push(x);
-                    normalData.push(y);
-                    normalData.push(z);                   
-                }
+                normalData.push(x);
+                normalData.push(y);
+                normalData.push(z);                   
                 // données de texture
                 textureCoordData.push(u);
                 textureCoordData.push(v);
@@ -369,8 +360,8 @@
     function initBuffers() 
     {
         // On crée les sphères
-        sphereOne = createSphere(40,[50, 40, 0], [0.3, 0.5, 0.75],6, false);
-        sphereTwo = createSphere(100000,[80, 100000, 0], [0.75, 0.75, 0.75],250, true);
+        sphereOne = createSphere(40,[50, 40, 0], [0.3, 0.5, 0.75],100);
+        sphereTwo = createSphere(100000,[80, -100000, 0], [0.75, 0.75, 0.75],250);
     }
     function drawSphere(parSphere)
     {
@@ -435,7 +426,7 @@
 </head>
 
 <body onload="main();">
-    <canvas id="tp1Canvas" style="border: none;" width="500" height="500"></canvas>
+    <canvas id="tp1Canvas" style="border: none;" width="512" height="384"></canvas>
 </body>
 
 </html>

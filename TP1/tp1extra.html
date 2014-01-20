@@ -1,0 +1,640 @@
+
+<html>
+<head>
+<title>TP1 Partie2 Anis Benyoub</title>
+<!-- Import de la lib de math glMatrix -->
+<!-- Cette librarie provient de https://code.google.com/p/glmatrix/ -->
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+
+<script type="text/javascript">
+
+// Constantes
+var PI = 3.14159265359;
+var EPSILON = 0.0001;
+var reduce = 0.9;
+
+// Données de la scene
+var primitives = [];
+var lumieres = [];
+var backgroundColor = [0, 0, 0];
+var LightIntensity = PI;
+
+var cubeSize = 50;
+
+// Données camera
+var width = 1280.0;
+var height = 720.0;
+var ratio = width/height;
+var angleView = 45;
+var focalDistance = 10;
+var cameraPos = [0 , 0, 100];
+var cameraDirection = [0, 0, -1];
+
+
+
+
+function printToPage(name, vec)
+{
+    var mytext = name +vec.toString();
+    document.writeln(mytext);
+}
+function createNorm(parTriangle)
+{
+    var norm = [0,0,0];
+    vec3.cross(substract(parTriangle.p2,parTriangle.p0),substract(parTriangle.p1,parTriangle.p0),norm);
+    vec3.normalize(norm);
+    parTriangle.normale = norm;   
+}
+
+// Fonction de traitement des vec32
+function scale( x,y )
+{
+    return [x[0]*y, x[1]*y, x[2]*y];
+}
+
+function negate(x)
+{
+    return [-x[0], -x[1], -x[2]];
+}
+
+function addV( x,y )
+{
+    return [x[0]+y[0], x[1]+y[1], x[2]+y[2]];
+}
+
+function dot( x,y )
+{
+    return x[0]*y[0]+ x[1]*y[1]+ x[2]*y[2];
+}
+
+function substract( x,y )
+{
+    return [x[0]-y[0], x[1]-y[1], x[2]-y[2]];
+}
+
+function mult( x,y )
+{
+    return [x[0]*y[0], x[1]*y[1], x[2]*y[2]];
+}
+function normalizeAndNorm( x)
+{
+    var norm = Math.sqrt( x[0]*x[0]+ x[1]*x[1]+ x[2]*x[2]);
+    x = [x[0]/norm, x[1]/norm, x[2]/norm];
+    return norm;
+}
+function normalize( x)
+{
+    var norm = Math.sqrt( x[0]*x[0]+ x[1]*x[1]+ x[2]*x[2]);
+    return [x[0]/norm, x[1]/norm, x[2]/norm];
+}
+function norm( x)
+{
+    var norm = Math.sqrt( x[0]*x[0]+ x[1]*x[1]+ x[2]*x[2]);
+    return norm;
+}
+
+// Conversion de float à int pour les couleurs
+function FloatToInt( x ) 
+{
+    return x * 255;
+}
+// Affecte la couleur d'un pixel
+function SetPixelColor(parImage, parColor, parWidth, parHeight)
+{
+    var pixel_index = ( parHeight - 1) * width + parWidth;
+    parImage[3 * pixel_index + 0] = parColor[0];
+    parImage[3 * pixel_index + 1] = parColor[1];
+    parImage[3 * pixel_index + 2] = parColor[2];
+}
+// Intersection avec une sphère
+function IntersectSphere(parRayon, parSphere)
+{
+    // Donnée d'intersection
+    var intersect = [];
+    intersect.isValid = false;
+    // Données de l'equation de second degrès 
+    var A = dot(parRayon.direction,parRayon.direction);
+    var B = 2*dot(substract(parRayon.origin,parSphere.centre),parRayon.direction);
+    var C = dot(substract(parRayon.origin,parSphere.centre),substract(parRayon.origin,parSphere.centre)) - parSphere.rayon*parSphere.rayon;
+    
+    // Calcul du determinant
+    var delta = B*B-4*A*C;
+    // test positif
+    if(delta<-EPSILON)
+    {
+        return intersect
+    }
+    //resultat nul
+    else if(delta==0)
+    {   
+        var t = -B/2.0*A; 
+        if(t>0)
+        {
+            intersect.isValid = true;
+            intersect.distance = t;
+            intersect.colorVal = parSphere.colorVal;
+        }
+    }
+    // Delta non nul
+    else
+    {
+        // Les deux solutions
+        var t1 = (-B - Math.sqrt(delta))/(2*A);
+        var t2 = (-B + Math.sqrt(delta))/(2*A);
+        // On garde le minimum positif
+        var finalt = Infinity;
+        if (t1 > 0)
+            finalt = Math.min(finalt, t1);
+        if (t2 > 0)
+            finalt = Math.min(finalt, t2);
+        intersect.distance = finalt;
+        if(finalt>EPSILON && finalt!=Infinity)
+        {
+            // On défini l'intersection
+            intersect.isValid = true;
+            intersect.colorVal = parSphere.colorVal;
+            intersect.position = addV(parRayon.origin,scale(parRayon.direction,finalt));
+            // printToPage("intersect.position", intersect.position);
+            // printToPage("intersect.origin", parRayon.origin);
+            // printToPage("distance", intersect.distance);
+            intersect.normal = substract(intersect.position,parSphere.centre);
+
+            if((t1>0 && t2<0)||(t2>0 && t1<0))
+                intersect.normal = negate(intersect.normal);
+            vec3.normalize(intersect.normal);
+        }
+    }
+    return intersect;
+}
+
+function IntersectTriangle(parRayon, parTriangle)
+{
+
+    // Donnée d'intersection
+    var intersect = [];
+    intersect.isValid = false;
+
+    var edge1 = substract(parTriangle.p1, parTriangle.p0);
+    var edge2 = substract(parTriangle.p2, parTriangle.p0);
+    var vecP = [0, 0, 0];
+    vec3.cross(parRayon.direction, edge2, vecP);
+    var det = dot(edge1, vecP);
+
+    if(Math.abs(det)<EPSILON)
+        return intersect;
+
+    var invDet = 1.0 / det;
+    var vecS = substract(parRayon.origin, parTriangle.p0);
+
+    var u = dot(vecS, vecP) * invDet;
+    if(u<0 || u>1)
+        return intersect;
+    var vecQ = [0,0,0];
+    vec3.cross(vecS, edge1,vecQ);
+    var v = dot(parRayon.direction, vecQ) * invDet;
+    if(v<0 || u + v > 1)
+        return intersect;
+    intersect.distance = dot(edge2, vecQ) * invDet;
+    var I = addV(parRayon.origin, scale(parRayon.direction ,intersect.distance));
+
+    if(intersect.distance < EPSILON)
+        return intersect;
+    intersect.distance = Math.abs(intersect.distance);
+
+
+    // var uv0 = parTriangle.uv0;
+    // var uv1 = parTriangle.uv1;
+    // var uv2 = parTriangle.uv2;
+
+    // vec2 uvI = u*(uv1-uv0)+v*(uv2-uv0)+uv0;
+
+    intersect.position = I;
+    // intersect.uv = uvI;
+    if(dot(parRayon.direction, parTriangle.normale) > 0)
+        intersect.normal = -parTriangle.normale;
+    else
+        intersect.normal = parTriangle.normale;
+    intersect.colorVal = parTriangle.colorVal;
+    intersect.isValid = true;
+
+    return intersect;
+}
+function ComputeLight(parIntersect, parLight)
+{
+    // On calcule la lumière
+    var color;
+    switch(parLight.typeLight)
+    {
+        case "point":
+        {
+            var lightDir = substract(parLight.position,parIntersect.position);
+            vec3.normalize(lightDir);
+            var ndotl = dot(parIntersect.normal,lightDir);
+            // color = scale(parIntersect.colorVal, Math.abs()*LightIntensity/PI);
+            color = scale(parIntersect.colorVal, Math.max(ndotl,0)*LightIntensity/PI);
+        }
+        break;
+        case "directionnal":
+        {
+            color = scale(parIntersect.colorVal, Math.max(dot(parIntersect.normal,parLight.position),0)*LightIntensity/PI);
+        }
+        break;
+        default:
+            color = [0,0,0];
+
+    }
+    return color;
+}
+
+function createReflectRay(parRayon, parIntersect)
+{
+    var idotn = dot(parRayon.direction, parIntersect.normal);
+    var ray =[];
+    ray.direction = substract(parRayon.direction,scale(parIntersect.normal,2*idotn));
+    ray.origin = parIntersect.position;
+    ray.direction=normalize(ray.direction);
+    ray.outside= parRayon.outside;
+    return ray;
+}
+
+function createRefractRay(parRayon, parIntersect, ratio)
+{
+    var idotn = dot(parRayon.direction, parIntersect.normal);
+    var z = scale(substract(parRayon.direction,scale(parIntersect.normal,idotn)),ratio);
+    var ray =[];
+    var z2 = dot(z,z);
+    var test = 1-z2;
+    if(test>0)
+    {
+        scaleVal = Math.sqrt(1-z2);
+        ray.direction = substract(z,scale(parIntersect.normal,scaleVal));
+        ray.direction=normalize(ray.direction);
+        var decalage;
+        decalage = scale(parIntersect.normal,0.000000001);
+        ray.origin = addV(parIntersect.position,decalage);
+        ray.outside=!parRayon.outside;       
+    }
+    else
+    {
+        ray = createReflectRay(parRayon, parIntersect);
+    }
+
+
+    return ray;
+}
+
+function IntersectWithScene(parRayon)
+{
+    if(parRayon.energy<0.1)
+        return  [0,0,0];
+    // On intersecte avec tous les objets de la scene
+    var finalIntersect = [];
+    finalIntersect.distance = Infinity;
+    finalIntersect.normal = [0, 0,0];
+    finalIntersect.isValid = false;
+    finalIntersect.primIndex = -1;
+    for (var index = 0; index < primitives.length; ++index) 
+    {
+        var currentPrim = primitives[index];
+        switch(currentPrim.primType)
+        {
+            case "sphere":
+                intersection = IntersectSphere(parRayon, primitives[index]);
+            break;
+            case "triangle":
+                intersection = IntersectTriangle(parRayon, primitives[index]);
+            break;
+        }        // Est valide?
+        if(intersection.isValid)
+        {
+            // On garde la plus petite
+            if(intersection.distance<finalIntersect.distance)
+            {
+                finalIntersect = intersection;
+                finalIntersect.primIndex = index;
+            }
+        }
+    }
+    // La contribution lumineuse
+    var color = [0, 0, 0];
+    if(finalIntersect.isValid)
+    {
+        var reflect = primitives[finalIntersect.primIndex].reflexion;
+        var refract = primitives[finalIntersect.primIndex].refraction;
+        var val = 1.0-refract-reflect;
+
+        if(reflect>0.0)
+        {
+            var reflectRay = createReflectRay(parRayon,finalIntersect);
+            reflectRay.energy = parRayon.energy*reflect*reduce;
+            color=addV(color,scale(IntersectWithScene(reflectRay),reflectRay.energy));
+        }
+        if(refract>0.0)
+        {
+            var ratio = 0;
+            if(parRayon.outside)
+            {
+                ratio = 0.67;
+
+            }
+            else
+            {
+                ratio = 1.49;
+            }
+            var refractRay = createRefractRay(parRayon,finalIntersect,1/ratio);
+            refractRay.energy = parRayon.energy*refract*reduce;
+            color=addV(color,scale(IntersectWithScene(refractRay),1));
+            // color=IntersectWithScene(refractRay);
+        }      
+        if(val>0.0)
+        {
+            for (var index = 0; index < lumieres.length; ++index)
+            {
+                {
+                    color = addV(scale(color,val),ComputeLight(finalIntersect, lumieres[index]));
+                }
+                // ON crée le ryon secondaire
+                var Rayon = [];
+                Rayon.origin = finalIntersect.position;
+                Rayon.direction = substract(lumieres[index].position,finalIntersect.position);
+                var distance = normalizeAndNorm(Rayon.direction);
+                color=scale(color,IntersectToLight(Rayon, distance));            
+            }                
+        }
+        
+    }
+    else
+    {
+        color = backgroundColor;
+    }
+    return color;
+}
+
+function IntersectToLight(parRayon, parNorm)
+{
+    // On intersecte avec tout les objets de la peine
+    for (var index = 0; index < primitives.length; ++index) 
+    {
+        var currentPrim = primitives[index];
+        var intersection;
+        switch(currentPrim.primType)
+        {
+            case "sphere":
+                intersection = IntersectSphere(parRayon, primitives[index]);
+
+                if(intersection.isValid)
+                {
+                    var substractVal = substract(intersection.position, parRayon.origin);
+                    if(norm(substractVal)<parNorm)
+                    {
+                        return 0.5;
+                    }
+                }
+            break;
+            case "triangle":
+                intersection = IntersectTriangle(parRayon, primitives[index]);
+            break;
+        }       
+                // printToPage("light", 1);    
+
+    }
+    return 1.0;
+
+}
+
+function initScene()
+{
+
+    //On crée les lumires
+    var light1 = [];
+    light1.position = [0,0,0];
+    light1.typeLight = "point";
+    light1.colorVal = [1.0, 1.0, 1.0];
+    lumieres.push(light1);
+
+    // On crée les objets de la scene
+    var sphere1 =[];
+    sphere1.rayon = 10;
+    sphere1.centre = [-20, -cubeSize/2+10, -10];
+    sphere1.colorVal = [0.3, 0.5, 0.75];
+    sphere1.primType ="sphere";
+    sphere1.reflexion = 1.0;
+    sphere1.refraction = 0.0;
+    primitives.push(sphere1);
+
+    var sphere2 =[];
+    sphere2.rayon = 5;
+    sphere2.centre = [35, -cubeSize/2+5,-10 ];
+    sphere2.colorVal = [0.0, 1.0, 1.0];
+    sphere2.primType ="sphere";
+    sphere2.reflexion = 0;
+    sphere2.refraction = 1.0;
+    primitives.push(sphere2);
+
+    var triangle1 = [];
+    triangle1.p0 = [cubeSize, -cubeSize/2, cubeSize];
+    triangle1.p1 = [-cubeSize, -cubeSize/2, -cubeSize];
+    triangle1.p2 = [cubeSize, -cubeSize/2, -cubeSize];
+    triangle1.colorVal = [0.75, 0.75, 0.75];
+    createNorm(triangle1);
+    triangle1.primType ="triangle";
+    triangle1.reflexion = 0;
+    triangle1.refraction = 0;
+    primitives.push(triangle1);    
+
+
+    var triangle2 = [];
+    triangle2.p0 = [-cubeSize, -cubeSize/2, cubeSize];
+    triangle2.p1 = [-cubeSize, -cubeSize/2, -cubeSize];
+    triangle2.p2 = [cubeSize, -cubeSize/2, cubeSize];
+    triangle2.colorVal = [0.75, 0.75, 0.75];
+    createNorm(triangle2);
+    triangle2.primType ="triangle";
+    triangle2.reflexion = 0;
+    triangle2.refraction = 0;
+    primitives.push(triangle2);  
+
+
+    var triangle3 = [];
+    triangle3.p0 = [-cubeSize, cubeSize/2, cubeSize];
+    triangle3.p1 = [-cubeSize, cubeSize/2, -cubeSize];
+    triangle3.p2 = [-cubeSize, -cubeSize/2, -cubeSize];
+    triangle3.colorVal = [0.75, 0.2, 0.5];
+    createNorm(triangle3);
+    triangle3.primType ="triangle";
+    triangle3.reflexion = 0.8;
+    triangle3.refraction = 0;
+    primitives.push(triangle3);    
+
+    var triangle4 = [];
+    triangle4.p0 = [-cubeSize, -cubeSize/2, cubeSize];
+    triangle4.p1 = [-cubeSize, cubeSize/2, cubeSize];
+    triangle4.p2 = [-cubeSize, -cubeSize/2, -cubeSize];
+    triangle4.colorVal = [0.75, 0.2, 0.5];
+    createNorm(triangle4);
+    triangle4.primType ="triangle";
+    triangle4.reflexion = 0.8;
+    triangle4.refraction = 0;
+    primitives.push(triangle4);    
+    
+
+    var triangle5 = [];
+    triangle5.p0 = [cubeSize, cubeSize/2, cubeSize];
+    triangle5.p1 = [cubeSize, -cubeSize/2, -cubeSize];
+    triangle5.p2 = [cubeSize, cubeSize/2, -cubeSize];
+    triangle5.colorVal = [0.6, 0.0, 1.0];
+    createNorm(triangle5);
+    triangle5.primType ="triangle";
+    triangle5.reflexion = 0;
+    triangle5.refraction = 0;
+    primitives.push(triangle5);    
+
+    var triangle6 = [];
+    triangle6.p0 = [cubeSize, -cubeSize/2, cubeSize];
+    triangle6.p1 = [cubeSize, -cubeSize/2, -cubeSize];
+    triangle6.p2 = [cubeSize, cubeSize/2, cubeSize];
+    triangle6.colorVal = [0.6, 0.0, 1.0];
+    createNorm(triangle6);
+    triangle6.primType ="triangle";
+    triangle6.reflexion = 0;
+    triangle6.refraction = 0;
+    primitives.push(triangle6);   
+
+
+    var triangle7 = [];
+    triangle7.p0 = [cubeSize, cubeSize/2, cubeSize];
+    triangle7.p2 = [-cubeSize, cubeSize/2, -cubeSize];
+    triangle7.p1 = [cubeSize, cubeSize/2, -cubeSize];
+
+    triangle7.colorVal = [0.75, 0.5, 0.5];
+    createNorm(triangle7);
+    triangle7.primType ="triangle";
+    triangle7.reflexion = 0;
+    triangle7.refraction = 0;
+    primitives.push(triangle7);    
+
+
+    var triangle8 = [];
+    triangle8.p0 = [-cubeSize, cubeSize/2, cubeSize];
+    triangle8.p2 = [-cubeSize, cubeSize/2, -cubeSize];
+    triangle8.p1 = [cubeSize, cubeSize/2, cubeSize];
+    triangle8.colorVal = [0.75, 0.5, 0.5];
+    createNorm(triangle8);
+    triangle8.primType ="triangle";
+    triangle8.reflexion = 0;
+    triangle8.refraction = 0;
+    primitives.push(triangle8); 
+
+
+    var triangle9 = [];
+    triangle9.p0 = [cubeSize, cubeSize/2, -cubeSize];
+    triangle9.p2 = [-cubeSize, cubeSize/2, -cubeSize];
+    triangle9.p1 = [cubeSize, -cubeSize/2, -cubeSize];
+
+    triangle9.colorVal = [0.75, 0.75, 0];
+    createNorm(triangle9);
+    triangle9.primType ="triangle";
+    triangle9.reflexion = 0;
+    triangle9.refraction = 0;
+    primitives.push(triangle9);    
+
+
+    var triangle10 = [];
+    triangle10.p0 = [-cubeSize, cubeSize/2, -cubeSize];
+    triangle10.p2 = [-cubeSize, -cubeSize/2, -cubeSize];
+    triangle10.p1 = [cubeSize, -cubeSize/2, -cubeSize];
+    triangle10.colorVal = [0.75, 0.75, 0];
+    createNorm(triangle10);
+    triangle10.primType ="triangle";
+    triangle10.reflexion = 0;
+    triangle10.refraction = 0;
+    primitives.push(triangle10); 
+
+
+}
+function main() 
+{
+    // On crée la scene
+    initScene();
+    // Vecteur avant de la camera
+    var zDir = [0,0,0];
+    zDir=normalize(cameraDirection);
+
+    // On défini le centre de l'ecran
+    var dirVec = [0,0,0];
+    vec3.scale(zDir, focalDistance, dirVec);
+    var centreEcran = [0, 0, 0];
+    vec3.add(cameraPos, dirVec, centreEcran);
+
+    // La hauteur de l'ecran
+    var hauteurEcran = Math.tan(angleView*3.14/(2.0*180))*focalDistance;
+
+    // Les deux vecteurs de l'ecran X et Y
+    var yDir  = [0, 0, 0];
+    vec3.cross(zDir,[1.0, 0.0, 0.0],yDir);
+    yDir=normalize(yDir);
+
+    var xDir = [0,0,0];
+    vec3.cross(yDir,zDir,xDir);
+    xDir=normalize(xDir);
+    // Coin supérieur gauche
+    var pointGauche = [0,0,0];
+    vec3.subtract(centreEcran, scale(yDir,hauteurEcran),pointGauche);
+    var coinSupGauche = vec3.subtract(pointGauche, scale(xDir,hauteurEcran*ratio));
+
+    var unitX = (2.0*hauteurEcran/height);
+    var unitY = (2.0*hauteurEcran/width*ratio);
+    // Pour chacun des pixels
+    var image = new Float32Array(3 * width * height);
+    for (var x = 0; x < width; x++) 
+    {
+        for (var y = 0; y < height; y++) 
+        {
+            var ydis = scale(yDir,y*unitX);
+            var xdis = scale(xDir,x*unitY);
+
+            var displacement = addV(xdis,ydis);
+            var point = addV(coinSupGauche,displacement);
+            
+            var direction = substract(point,cameraPos);
+            // On crée le rayon associé
+            var Rayon = [];
+            Rayon.origin = point;
+            Rayon.direction = direction;
+            Rayon.energy = 1.0;
+            Rayon.outside = false;
+            Rayon.direction=normalize(Rayon.direction);
+            //Intersection avec la scene
+            var color = IntersectWithScene(Rayon);
+            SetPixelColor(image, color, x, y);
+        }
+    }
+
+    // Création du canvas
+    var canvas = document.createElement( "canvas" );
+    canvas.width = width;
+    canvas.height = height;
+    document.body.appendChild( canvas );
+
+    // Contexte  graphique
+    var context2D = canvas.getContext("2d");
+    var imgData = context2D.getImageData(0, 0, width, height);
+
+    // Conversion en int
+    for(var i = 0, j = 0, k = 0; i < width * height; i++)
+    {
+        imgData.data[ j++ ] = FloatToInt( image[k++] );
+        imgData.data[ j++ ] = FloatToInt( image[k++] );
+        imgData.data[ j++ ] = FloatToInt( image[k++] );
+        imgData.data[ j++ ] = 255; // alpha = 1, always
+    }
+    // Affichage du resultat
+    context2D.putImageData(imgData, 0, 0);
+}
+</script>
+</head>
+
+<body onload="main();">
+</body>
+
+</html>
