@@ -127,14 +127,14 @@ function IntersectSphere(parRayon, parSphere)
 function ComputeLight(parIntersect)
 {
     // On calcule la lumière
-    return scale(parIntersect.colorVal, Math.max(dot(parIntersect.normal,lightDir))*LightIntensity/PI);
+    return scale(parIntersect.colorVal, Math.max(dot(parIntersect.normal,lightDir))*LightIntensity/PI,0);
 }
 function IntersectWithScene(parRayon)
 {
     // On intersecte avec tous les objets de la scene
     var finalIntersect = [];
     finalIntersect.distance = Infinity;
-    finalIntersect.normal = [1, 0,0];
+    finalIntersect.normal = [0, 0,0];
     finalIntersect.isValid = false;
     for (var index = 0; index < primitives.length; ++index) 
     {

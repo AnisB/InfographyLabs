@@ -17,7 +17,7 @@ var reduce = 0.9;
 var primitives = [];
 var lumieres = [];
 var backgroundColor = [0, 0, 0];
-var LightIntensity = PI;
+var LightIntensity = PI*4000;
 
 var cubeSize = 50;
 
@@ -31,13 +31,14 @@ var cameraPos = [0 , 0, 100];
 var cameraDirection = [0, 0, -1];
 
 
-
-
+// Fonction de debug
 function printToPage(name, vec)
 {
     var mytext = name +vec.toString();
     document.writeln(mytext);
 }
+
+// Calcule la normale pour le triangle passé en paramètre
 function createNorm(parTriangle)
 {
     var norm = [0,0,0];
@@ -46,47 +47,57 @@ function createNorm(parTriangle)
     parTriangle.normale = norm;   
 }
 
-// Fonction de traitement des vec32
+// Fonction de traitement des vec3
+
+// Scale x par y
 function scale( x,y )
 {
     return [x[0]*y, x[1]*y, x[2]*y];
 }
 
+// Calcule la valeur negative de x
 function negate(x)
 {
     return [-x[0], -x[1], -x[2]];
 }
 
+// Ajoute x à y et renvoie le resultat
 function addV( x,y )
 {
     return [x[0]+y[0], x[1]+y[1], x[2]+y[2]];
 }
-
+// Calcule x dot y
 function dot( x,y )
 {
     return x[0]*y[0]+ x[1]*y[1]+ x[2]*y[2];
 }
-
+// Calcule x-y
 function substract( x,y )
 {
     return [x[0]-y[0], x[1]-y[1], x[2]-y[2]];
 }
 
+// Multiplication terme a terme de x et y
 function mult( x,y )
 {
     return [x[0]*y[0], x[1]*y[1], x[2]*y[2]];
 }
+
+// normalise x et renvoie sa norme
 function normalizeAndNorm( x)
 {
     var norm = Math.sqrt( x[0]*x[0]+ x[1]*x[1]+ x[2]*x[2]);
     x = [x[0]/norm, x[1]/norm, x[2]/norm];
     return norm;
 }
+// Normalise x
 function normalize( x)
 {
     var norm = Math.sqrt( x[0]*x[0]+ x[1]*x[1]+ x[2]*x[2]);
     return [x[0]/norm, x[1]/norm, x[2]/norm];
 }
+
+//calcule la norme de x
 function norm( x)
 {
     var norm = Math.sqrt( x[0]*x[0]+ x[1]*x[1]+ x[2]*x[2]);
@@ -154,9 +165,6 @@ function IntersectSphere(parRayon, parSphere)
             intersect.isValid = true;
             intersect.colorVal = parSphere.colorVal;
             intersect.position = addV(parRayon.origin,scale(parRayon.direction,finalt));
-            // printToPage("intersect.position", intersect.position);
-            // printToPage("intersect.origin", parRayon.origin);
-            // printToPage("distance", intersect.distance);
             intersect.normal = substract(intersect.position,parSphere.centre);
 
             if((t1>0 && t2<0)||(t2>0 && t1<0))
@@ -167,6 +175,7 @@ function IntersectSphere(parRayon, parSphere)
     return intersect;
 }
 
+// Implémentation inspirée de Fast,Minimum storage ray/triangle intersection de Thomas möller et Ben trumbore
 function IntersectTriangle(parRayon, parTriangle)
 {
 
@@ -174,8 +183,11 @@ function IntersectTriangle(parRayon, parTriangle)
     var intersect = [];
     intersect.isValid = false;
 
+    // Les deux cotés du triangle
     var edge1 = substract(parTriangle.p1, parTriangle.p0);
     var edge2 = substract(parTriangle.p2, parTriangle.p0);
+
+    // Vérification de la coplanérité des deux coté et du rayon de vue
     var vecP = [0, 0, 0];
     vec3.cross(parRayon.direction, edge2, vecP);
     var det = dot(edge1, vecP);
@@ -201,15 +213,9 @@ function IntersectTriangle(parRayon, parTriangle)
         return intersect;
     intersect.distance = Math.abs(intersect.distance);
 
-
-    // var uv0 = parTriangle.uv0;
-    // var uv1 = parTriangle.uv1;
-    // var uv2 = parTriangle.uv2;
-
-    // vec2 uvI = u*(uv1-uv0)+v*(uv2-uv0)+uv0;
-
+    // Calcul des données utiles
     intersect.position = I;
-    // intersect.uv = uvI;
+
     if(dot(parRayon.direction, parTriangle.normale) > 0)
         intersect.normal = -parTriangle.normale;
     else
@@ -219,7 +225,7 @@ function IntersectTriangle(parRayon, parTriangle)
 
     return intersect;
 }
-function ComputeLight(parIntersect, parLight)
+function ComputeLight(parIntersect, parLight,parDistance)
 {
     // On calcule la lumière
     var color;
@@ -230,8 +236,8 @@ function ComputeLight(parIntersect, parLight)
             var lightDir = substract(parLight.position,parIntersect.position);
             vec3.normalize(lightDir);
             var ndotl = dot(parIntersect.normal,lightDir);
-            // color = scale(parIntersect.colorVal, Math.abs()*LightIntensity/PI);
-            color = scale(parIntersect.colorVal, Math.max(ndotl,0)*LightIntensity/PI);
+            var distance = parIntersect.distance*parIntersect.distance+parDistance*parDistance;
+            color = scale(parIntersect.colorVal, Math.max(ndotl,0)*LightIntensity/(PI)/distance);
         }
         break;
         case "directionnal":
@@ -248,6 +254,7 @@ function ComputeLight(parIntersect, parLight)
 
 function createReflectRay(parRayon, parIntersect)
 {
+    // Calcul du rayon réfléchi
     var idotn = dot(parRayon.direction, parIntersect.normal);
     var ray =[];
     ray.direction = substract(parRayon.direction,scale(parIntersect.normal,2*idotn));
@@ -259,6 +266,7 @@ function createReflectRay(parRayon, parIntersect)
 
 function createRefractRay(parRayon, parIntersect, ratio)
 {
+    // Calcul du rayon refracté
     var idotn = dot(parRayon.direction, parIntersect.normal);
     var z = scale(substract(parRayon.direction,scale(parIntersect.normal,idotn)),ratio);
     var ray =[];
@@ -269,6 +277,7 @@ function createRefractRay(parRayon, parIntersect, ratio)
         scaleVal = Math.sqrt(1-z2);
         ray.direction = substract(z,scale(parIntersect.normal,scaleVal));
         ray.direction=normalize(ray.direction);
+        // Decalage pour éviter les artefacts d'auto-ombrage
         var decalage;
         decalage = scale(parIntersect.normal,0.000000001);
         ray.origin = addV(parIntersect.position,decalage);
@@ -283,8 +292,9 @@ function createRefractRay(parRayon, parIntersect, ratio)
     return ray;
 }
 
-function IntersectWithScene(parRayon)
+function IntersectWithScene(parRayon,parDistance)
 {
+    // Condition d'arret
     if(parRayon.energy<0.1)
         return  [0,0,0];
     // On intersecte avec tous les objets de la scene
@@ -327,7 +337,7 @@ function IntersectWithScene(parRayon)
         {
             var reflectRay = createReflectRay(parRayon,finalIntersect);
             reflectRay.energy = parRayon.energy*reflect*reduce;
-            color=addV(color,scale(IntersectWithScene(reflectRay),reflectRay.energy));
+            color=addV(color,scale(IntersectWithScene(reflectRay,finalIntersect.distance+ parDistance),reflectRay.energy));
         }
         if(refract>0.0)
         {
@@ -343,22 +353,21 @@ function IntersectWithScene(parRayon)
             }
             var refractRay = createRefractRay(parRayon,finalIntersect,1/ratio);
             refractRay.energy = parRayon.energy*refract*reduce;
-            color=addV(color,scale(IntersectWithScene(refractRay),1));
-            // color=IntersectWithScene(refractRay);
+            color=addV(color,scale(IntersectWithScene(refractRay,finalIntersect.distance+parDistance),1));
         }      
         if(val>0.0)
         {
             for (var index = 0; index < lumieres.length; ++index)
             {
                 {
-                    color = addV(scale(color,val),ComputeLight(finalIntersect, lumieres[index]));
+                    color = addV(scale(color,val),ComputeLight(finalIntersect, lumieres[index],parDistance));
                 }
-                // ON crée le ryon secondaire
+                // ON crée le rayon secondaire
                 var Rayon = [];
                 Rayon.origin = finalIntersect.position;
                 Rayon.direction = substract(lumieres[index].position,finalIntersect.position);
                 var distance = normalizeAndNorm(Rayon.direction);
-                color=scale(color,IntersectToLight(Rayon, distance));            
+                color=scale(color,IntersectToLight(Rayon,distance));            
             }                
         }
         
@@ -382,20 +391,20 @@ function IntersectToLight(parRayon, parNorm)
             case "sphere":
                 intersection = IntersectSphere(parRayon, primitives[index]);
 
-                if(intersection.isValid)
-                {
-                    var substractVal = substract(intersection.position, parRayon.origin);
-                    if(norm(substractVal)<parNorm)
-                    {
-                        return 0.5;
-                    }
-                }
+
             break;
             case "triangle":
                 intersection = IntersectTriangle(parRayon, primitives[index]);
             break;
         }       
-                // printToPage("light", 1);    
+        if(intersection.isValid)
+        {
+            var substractVal = substract(intersection.position, parRayon.origin);
+            if(norm(substractVal)<parNorm)
+            {
+                return 0.5;
+            }
+        }
 
     }
     return 1.0;
@@ -407,7 +416,7 @@ function initScene()
 
     //On crée les lumires
     var light1 = [];
-    light1.position = [0,0,0];
+    light1.position = [0,0,-15];
     light1.typeLight = "point";
     light1.colorVal = [1.0, 1.0, 1.0];
     lumieres.push(light1);
@@ -605,7 +614,7 @@ function main()
             Rayon.outside = false;
             Rayon.direction=normalize(Rayon.direction);
             //Intersection avec la scene
-            var color = IntersectWithScene(Rayon);
+            var color = IntersectWithScene(Rayon,0);
             SetPixelColor(image, color, x, y);
         }
     }

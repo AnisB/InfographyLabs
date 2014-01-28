@@ -242,6 +242,8 @@
         gl.uniform3fv(shaderProgram.colorUniform, parSphere.colorVal);
     }
 
+    // Inspiré de l'implémentation de 
+    // http://learningwebgl.com/cookbook/index.php/How_to_draw_a_sphere
     function createSphere(parRadius, parPosition, parColorVal, parTesselation)
     {
         // Données de sphere
@@ -410,7 +412,6 @@
         var canvas = document.getElementById("tp1Canvas");
         // Initialisation du contexte WebGL
         initGL(canvas);
-        gl.enable(gl.LINE_SMOOTH);
         // Initialisation des shaders (vertex et fragment)
         initShaderProgram("basicVertex", "basicFragment");
         initScene();
