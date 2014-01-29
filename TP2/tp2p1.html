@@ -1,0 +1,24 @@
+<html>
+<head>
+<title>TP1 Partie1 Anis Benyoub</title>
+<!-- Import de la lib de math glMatrix -->
+<!-- Cette librarie provient de https://code.google.com/p/glmatrix/ -->
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="libtp2.js"></script>
+
+<script type="text/javascript">
+    function main() 
+    {
+        // Récupération du canvas
+        var canvas = document.getElementById("tp1Canvas");
+        // Initialisation du contexte WebGL
+        initGL(canvas);
+    }
+</script>
+</head>
+
+<body onload="main();">
+    <canvas id="tp1Canvas" style="border: none;" width="512" height="384"></canvas>
+</body>
+
+</html>
