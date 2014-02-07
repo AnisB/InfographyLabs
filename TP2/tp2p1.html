@@ -24,15 +24,55 @@
     // Intensité lumineuse de la source de lumière
     uniform float I;
 
-    uniform sampler2D shadowMap;
+    uniform sampler2D shadowMap1;
+    uniform sampler2D shadowMap2;
 
+    varying vec4 shadowPosition1;
+    varying float shadowCoord1;
+    
 
+    varying vec4 shadowPosition2;
+    varying float shadowCoord2;
+    
+    varying float distance;
 
+    const float far = 500.0;
+    const float near = 0.1;
+    float computeShadows()
+    {
+        float filter = 1.0;
+        vec2 coords = shadowPosition1.xy/shadowPosition1.w;
+        if(coords.x>0.0 && coords.x<1.0 && coords.y<1.0 && coords.y>0.0)
+        {
+            vec2 bytes = texture2D(shadowMap1, coords).xy;
+            float scaledDepth = bytes.x + bytes.y/255.0;
+            float coord = (shadowCoord1-near)/(far-near);
+            coord-=0.01;
+            if(scaledDepth < coord)
+            {
+                filter=0.0;
+            }
+        }
+        coords = shadowPosition2.xy/shadowPosition2.w;
+        if(coords.x>0.0 && coords.x<1.0 && coords.y<1.0 && coords.y>0.0)
+        {
+            vec2 bytes = texture2D(shadowMap2, coords).xy;
+            float scaledDepth = bytes.x + bytes.y/255.0;
+            float coord = (shadowCoord2-near)/(far-near);
+            coord-=0.01;
+            if(scaledDepth < coord)
+            {
+                filter=0.0;
+            }
+        }        
+        return filter;
+    }
     void main(void) 
     {
+
         // Calcul de la lumière
-        // gl_FragColor = vec4(I*rho/3.14*dot(normal,light),1.0);
-        gl_FragColor = vec4(rho*dot(normal,light),1.0);
+        gl_FragColor = vec4(I*rho*dot(normal,light)*computeShadows(),1.0);
+        // gl_FragColor = vec4(scaledDepth,0.0,0.0,1.0);
     }
 </script>
 
@@ -57,25 +97,49 @@
     // Direction de la lumière en espace monde
     uniform vec3 LightDirection;
 
+
+    // Shading data
+    uniform mat4 LightView1;
+    uniform mat4 LightView2;
+    uniform mat4 LightProj;
+
+    varying vec4 shadowPosition1;
+    varying float shadowCoord1;
+
+    varying vec4 shadowPosition2;
+    varying float shadowCoord2;
+
     // Données à Injecter dans le fragment shader
     // Normale normalisée en espace monde
     varying vec3 normal;
     // Vecteur lumière en espace monde
     varying vec3 light;
+    varying float distance;
     // Coordnnées texture
     varying vec2 texcoord;
-
+    const mat4 ScaleMatrix = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.5, 0.5, 0.5, 1.0);
     void main(void) 
     {
         // Conversion en coordnnées clipping
         vec4 ecPos = ModelMatrix * vec4(VertexPosition, 1.0);
         gl_Position = ProjMatrix * ViewMatrix * ecPos;
         // Normalisation du vecteur de lumière (peut être fait dans le CPU pour éviter de le refaire)
-        light = normalize(LightDirection-ecPos.xyz);
+        light = (-LightView1[3].xyz-ecPos.xyz);
+        distance = length(light);
+        distance = distance*distance;
+        light=normalize(light);
         // Normalisation et conversion en espace monde
         normal = normalize(NormalMatrix*vec4(VertexNormal,0.0)).xyz;
         // coordonnées de texture
         texcoord = VertexTexCoord;
+
+        vec4 tmpShadowPos1 = LightProj * LightView1 * ecPos;
+        shadowCoord1 = tmpShadowPos1.z;
+        shadowPosition1 = ScaleMatrix*tmpShadowPos1;
+
+        vec4 tmpShadowPos2 = LightProj * LightView2 * ecPos;
+        shadowCoord2 = tmpShadowPos2.z;
+        shadowPosition2 = ScaleMatrix*tmpShadowPos2;
     }
 </script>
 
@@ -83,12 +147,15 @@
 <script id="shadowFragment" type="glsl/frag">
 
     precision mediump float;
-    
+    const float near = 1.0;
+    const float far = 500.0;
     void main(void) 
     {
-        // Calcul de la lumière
-        // gl_FragColor = vec4(I*rho/3.14*dot(normal,light),1.0);
-        gl_FragColor = vec4(1.0,0.0,0.0,1.0);
+        float depth = gl_FragCoord.z/gl_FragCoord.w;
+        float scaledDepth = clamp((depth-near)/(far-near), 0.0, 1.0);
+        float highByte = scaledDepth;
+        float lowByte = fract(scaledDepth*255.0);
+        gl_FragColor = vec4(highByte, lowByte,0.0, 1.0);
     }
 </script>
 
@@ -104,6 +171,7 @@
     // Matrice de modele
     uniform mat4 ModelMatrix;
 
+
     void main(void) 
     {
         // Conversion en coordnnées clipping
@@ -118,6 +186,7 @@
     var gl;
     var canvas;
 
+    var delta = 0.0;
     // Inputs
     var currentlyPressedKeys = {};
     // Camera 
@@ -136,6 +205,9 @@
         // On définie la matrice de vue
         camera.viewMatrix = mat4.create();
         mat4.identity(camera.viewMatrix);
+        mat4.translate(camera.viewMatrix, [0,0,-300]);
+
+
         camera.isOutDated =  true;
     }
 
@@ -188,7 +260,15 @@
         parProgram.lightDirection = gl.getUniformLocation(parProgram, "LightDirection");
 
         // texture
-        parProgram.shadowMap = gl.getUniformLocation(parProgram, "ShadowMap");
+        parProgram.shadowMap2 = gl.getUniformLocation(parProgram, "shadowMap2");
+        parProgram.shadowMap1 = gl.getUniformLocation(parProgram, "shadowMap1");
+
+
+        // LightViewMatrix
+        parProgram.lightViewMatrix1 = gl.getUniformLocation(parProgram, "LightView1");
+        parProgram.lightViewMatrix2 = gl.getUniformLocation(parProgram, "LightView2");
+        // LightProjectionMatrix
+        parProgram.lightProjMatrix = gl.getUniformLocation(parProgram, "LightProj");
 
 
         // Injection de la projection matrix
@@ -198,19 +278,22 @@
         gl.uniform3fv(parProgram.colorUniform, parObj.colorVal);
 
         // Injection des données de lumières
-        gl.uniform1f(parProgram.lightIntensity, 3.14);
+        gl.uniform1f(parProgram.lightIntensity, 3.14*2.0);
         gl.uniform3fv(parProgram.lightDirection, [50,20,-50]);
         
     }
 
-    function injectLightData(parShader)
+    function injectLightData(parShader, parAvant)
     {
-        //if(camera.isOutDated)
+        if(parAvant == true)
         {  
             // Injection de la view matrix
-            gl.uniformMatrix4fv(parShader.viewMatrix, false, pointLight.viewMatrix);
-
-        }        
+            gl.uniformMatrix4fv(parShader.viewMatrix, false, pointLight.viewMatrix1);
+        }
+        else
+        {
+            gl.uniformMatrix4fv(parShader.viewMatrix, false, pointLight.viewMatrix2);
+        }
     }
     function injectGenericUniforms(parShader)
     {
@@ -244,8 +327,18 @@
             gl.uniformMatrix4fv(parObj.shaderProgram.normalMatrix, false, normalMatrix);
         }
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, pointLight.fbo.depthTex);
-        gl.uniform1i(parObj.shaderProgram.shadowMap, 0);
+        gl.bindTexture(gl.TEXTURE_2D, pointLight.fbo1.colorTex);
+        gl.uniform1i(parObj.shaderProgram.shadowMap1, 0);
+
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, pointLight.fbo2.colorTex);
+        gl.uniform1i(parObj.shaderProgram.shadowMap2, 1);
+
+        gl.uniformMatrix4fv(parObj.shaderProgram.lightViewMatrix1, false, pointLight.viewMatrix1);
+        gl.uniformMatrix4fv(parObj.shaderProgram.lightViewMatrix2, false, pointLight.viewMatrix2);
+        gl.uniformMatrix4fv(parObj.shaderProgram.lightProjMatrix, false, pointLight.projectionMatrix);
+
+
     }
 
     // Inspiré de l'implémentation de 
@@ -396,9 +489,21 @@
     function createScene() 
     {
         
+        pointLight.viewMatrix1 = mat4.create();
+        mat4.identity(pointLight.viewMatrix1);
+        pointLight.viewMatrix2 = mat4.create();
+        mat4.identity(pointLight.viewMatrix2);
+        mat4.rotate(pointLight.viewMatrix2, 3.14, [0,1,0],pointLight.viewMatrix2);
+        pointLight.projectionMatrix = mat4.create();
+        mat4.perspective(90, gl.viewportWidth / gl.viewportHeight, 0.1, 500.0, pointLight.projectionMatrix);
+        pointLight.shaderProgram = generateProgram("shadowVertex", "shadowFragment");
+        initShadowData(pointLight.shaderProgram);
+        pointLight.fbo1 = CreateFrameBufferObject(canvas.width,canvas.height);
+        pointLight.fbo2 = CreateFrameBufferObject(canvas.width,canvas.height);
+        
         
         // On crée les sphères
-        var sphereOne = createSphere(20,[0, -20, -100], [0.3, 0.5, 0.75],20);
+        var sphereOne = createSphere(10,[-50, -10, -100], [0.3, 0.5, 0.75],100);
         sphereOne.shaderProgram = generateProgram("basicVertex", "basicFragment");
         sphereOne.modelMatrix = mat4.create();
         mat4.identity(sphereOne.modelMatrix);
@@ -407,11 +512,10 @@
         sphereOne.isOutDated = true;
 
         sceneObjects.push(sphereOne);
-
-    
-
+        
+        
         // // On crée les sphères
-        var sphereTwo = createSphere(20,[100, -20, -50], [1.0, 0.5, 0.75],20);
+        var sphereTwo = createSphere(10,[100, -10, 100], [1.0, 0.5, 0.75],100);
         sphereTwo.shaderProgram = generateProgram("basicVertex", "basicFragment");
         sphereTwo.modelMatrix = mat4.create();
         mat4.identity(sphereTwo.modelMatrix);
@@ -420,9 +524,10 @@
         sphereTwo.isOutDated = true;
 
         sceneObjects.push(sphereTwo);
-
+        
+    
         // // On crée les sphères
-        var plan = createQuad([-100, -40, -300], [200, -40, -300], [-100, -40, 20], [200, -40, 20],  [1.0, 1.0, 0.75]);
+        var plan = createQuad([-100, -20, -400], [400, -20, -400], [-100, -20, 400], [400, -20, 400],  [1.0, 1.0, 0.75]);
         plan.shaderProgram = generateProgram("basicVertex", "basicFragment");
         plan.modelMatrix = mat4.create();
         mat4.identity(plan.modelMatrix);
@@ -431,15 +536,6 @@
         plan.isOutDated = true;
 
         sceneObjects.push(plan);
-    
-
-        pointLight.viewMatrix = mat4.create();
-        mat4.identity(pointLight.viewMatrix);
-        pointLight.projectionMatrix = mat4.create();
-        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 1000.0, pointLight.projectionMatrix);
-        pointLight.shaderProgram = generateProgram("shadowVertex", "shadowFragment");
-        initShadowData(pointLight.shaderProgram);
-        pointLight.fbo = CreateFrameBufferObject(canvas.width,canvas.height);
 
     }
     function drawObject(parObj)
@@ -493,6 +589,7 @@
         // On définie le viewport
         gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
         // On injecte les données communes
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         for(var i = 0; i < sceneObjects.length;++i)
         {
@@ -508,10 +605,23 @@
     }
     function generateShadowMap()
     {
+     
+        bindFBO(pointLight.fbo1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
-        bindFBO(pointLight.fbo);
-        // On injecte les données communes
         bindProgram(pointLight.shaderProgram);
+        injectLightData(pointLight.shaderProgram,true);
+        for(var i = 0; i < sceneObjects.length;++i)
+        {
+            drawObjectShadow(sceneObjects[i]);
+        }    
+        unbindProgram();
+        unbindFBO();
+    
+        bindFBO(pointLight.fbo2);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        bindProgram(pointLight.shaderProgram,false);
         injectLightData(pointLight.shaderProgram);
         for(var i = 0; i < sceneObjects.length;++i)
         {
@@ -532,7 +642,11 @@
     {
         window.requestAnimFrame(renderLoop);
         generateShadowMap();
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        pointLight.viewMatrix1[12] = 70*Math.sin(delta);
+        pointLight.viewMatrix2[12] = -70*Math.sin(delta);
+        // pointLight.viewMatrix2[13] = -200*Math.abs(Math.sin(delta));
+        // mat4.translate(pointLight.viewMatrix2,-Math.sin(delta),pointLight.viewMatrix2);
+        delta= delta +0.01;
         drawScene();        
     }
     function main() 
