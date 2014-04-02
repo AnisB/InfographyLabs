@@ -1,0 +1,243 @@
+
+<html>
+<head>
+<title>TP3 Partie1 Anis Benyoub</title>
+
+<script type="text/javascript">
+
+var nbSampleMT = 3000;
+var PI = 3.14159265359;
+var PIROOT = Math.sqrt(PI);
+
+function calcY(parL, parM, x,y,z)
+{
+    // Tout les polynomes
+    if(parL == 0)
+    {
+        return (1/(2*PIROOT));
+    }
+    else if(parL==1)
+    {
+        if(parM==-1)
+        {
+            return (-Math.sqrt(3)*y/(2*PIROOT));
+        }
+        else if(parM==0)
+        {
+            return (Math.sqrt(3)*z/(2*PIROOT));
+        }
+        else if(parM==1)
+        {
+            return (-Math.sqrt(3)*x/(2*PIROOT));
+        }
+    }
+    else if(parL==2)
+    {
+        if(parM==-2)
+        {
+            return (Math.sqrt(15)*y*x/(2*PIROOT));
+        }
+        else if(parM==-1)
+        {
+            return (-Math.sqrt(15)*y*z/(2*PIROOT));
+        }
+        else if(parM==0)
+        {
+            return (Math.sqrt(5)*(3*z*z-1)/(4*PIROOT));
+        }
+        else if(parM==1)
+        {
+            return (-Math.sqrt(15)*x*z/(2*PIROOT));
+        }
+        else if(parM==2)
+        {
+            return (Math.sqrt(15)*(x*x-y*y)/(4*PIROOT));
+        }
+    }
+    else if(parL==3)
+    {
+        if(parM==-3)
+        {
+            return (-Math.sqrt(2)*Math.sqrt(35)*y*(3*x*x-y*y)/(8*PIROOT));
+        }
+        else if(parM==-2)
+        {
+            return (Math.sqrt(105)*y*z*x/(2*PIROOT));
+        }
+        else if(parM==-1)
+        {
+            return (-Math.sqrt(2)*Math.sqrt(21)*y*(-1+5*z*z)/(8*PIROOT));
+        }
+        else if(parM==0)
+        {
+            return (Math.sqrt(7)*z*(5*z*z-3)/(4*PIROOT));
+        }
+        else if(parM==1)
+        {
+            return (-Math.sqrt(2)*Math.sqrt(21)*y*(-1+5*z*z)/(8*PIROOT));
+        }
+        else if(parM==2)
+        {
+            return (Math.sqrt(105)*(x*x-y*y)*z/(4*PIROOT));
+        }
+        else if(parM==3)
+        {
+            return (-Math.sqrt(2)*Math.sqrt(35)*y*(x*x-3*y*y)/(8*PIROOT));
+        }
+    }
+    else if(parL==4)
+    {
+        if(parM==-4)
+        {
+            return (3*Math.sqrt(35)*y*x*(x*x-y*y)/(4*PIROOT));
+        }
+        else if(parM==-3)
+        {
+            return (-3*Math.sqrt(2)*Math.sqrt(35)*y*(3*x*x-y*y)*z/(8*PIROOT));
+        }
+        else if(parM==-2)
+        {
+            return (3*Math.sqrt(5)*y*x*(-1+7*z*z)/(4*PIROOT));
+        }
+        else if(parM==-1)
+        {
+            return (3*Math.sqrt(2)*Math.sqrt(5)*y*z*(-3+7*z*z)/(8*PIROOT));
+        }
+        else if(parM==0)
+        {
+            return (3*(35*z*z*z*z-30*z*z+3)/(16*PIROOT));
+        }
+        else if(parM==1)
+        {
+            return (-3*Math.sqrt(2)*Math.sqrt(5)*x*z*(-3+7*z*z)/(8*PIROOT));
+        }
+        else if(parM==2)
+        {
+            return (3*Math.sqrt(5)*(x*x-y*y)*(-1+7*z*z)/(8*PIROOT));
+        }
+        else if(parM==3)
+        {
+            return (-3*Math.sqrt(2)*Math.sqrt(35)*x*(x*x-3*y*y)*z/(8*PIROOT));
+        }
+        else if(parM==4)
+        {
+            return (-3*Math.sqrt(2)*Math.sqrt(35)*x*(x*x-3*y*y)*z/(8*PIROOT));
+        }
+    }
+    else if(parL==5)
+    {
+        if(parM==-5)
+        {
+            return (-3*Math.sqrt(2)*Math.sqrt(77)*y*(5*x*x*x*x-10*y*y*x*x+y*y*y*y)/(32*PIROOT));
+        }
+        else if(parM==-4)
+        {
+            return (3*Math.sqrt(385)*y*x*(x*x-y*y)*z/(4*PIROOT));
+        }
+        else if(parM==-3)
+        {
+            return (-Math.sqrt(2)*Math.sqrt(385)*y*(3*x*x-y*y)*(-1+9*z*z)/(32*PIROOT));
+        }
+        else if(parM==-2)
+        {
+            return (Math.sqrt(1155)*y*x*z*(-1+3*z*z)/(4*PIROOT));
+        }
+        else if(parM==-1)
+        {
+            return (Math.sqrt(165)*y*(-14*z*z+21*z*z*z*z+1)/(16*PIROOT));
+        }
+        else if(parM==0)
+        {
+            return (Math.sqrt(11)*z*(63*z*z*z*z-70*z*z+15)/(16*PIROOT));
+        }
+        else if(parM==1)
+        {
+            return (Math.sqrt(165)*x*(-14*z*z+21*z*z*z*z+1)/(16*PIROOT));
+        }
+        else if(parM==2)
+        {
+            return (Math.sqrt(1155)*(x*x-y*y)*z*(-1+3*z*z)/(8*PIROOT));
+        }
+        else if(parM==3)
+        {
+            return (-3*Math.sqrt(2)*Math.sqrt(385)*x*(x*x-3*y*y)*(-1+9*z*z)/(32*PIROOT));
+        }
+        else if(parM==4)
+        {
+            return (3*Math.sqrt(385)*(x*x*x*x-6*y*y*x*x+y*y*y*y)*z/(16*PIROOT));
+        }
+        if(parM==5)
+        {
+            return (-3*Math.sqrt(2)*Math.sqrt(77)*x*(x*x*x*x-10*y*y*x*x+5*y*y*y*y)/(32*PIROOT));
+        }
+    }
+    return 0;
+
+}
+function Y(parTeta, parPhi, parL, parM)
+{
+    // On convertit theta phi en xyz
+    var cosT =  Math.cos(parTeta);
+    var sinT =  Math.sin(parTeta);
+    var cosP =  Math.cos(parPhi);
+    var sinP =  Math.sin(parPhi);
+
+    var x = sinT*cosP;
+    var y = sinT*sinP;
+    var z = cosT;
+    return calcY(parL, parM, x,y,z)
+}
+
+function Eval(parTeta, parPhi, parL, parM)
+{
+    var val = Math.sqrt(2)*Math.abs(Math.cos(parTeta))*Math.sin(parTeta);
+    var yval = Y(parTeta, parPhi, parL, parM);
+    return val*yval;
+}
+
+
+function ComputeFactor(parL, parM)
+{
+    // On évalue en prenant une pdf uniforme
+    var factor = 0;
+    for(var i = 0; i < nbSampleMT; ++i)
+    {
+        var randTeta = Math.random()*PI;
+        for(var j = 0; j < nbSampleMT; ++j)
+        {
+            var randPhi = Math.random()*2*PI;
+            factor += Eval(randTeta, randPhi, parL, parM);
+        }
+    }
+    // Division par la pdf
+    factor*=(2*PI*PI);
+    factor/=(nbSampleMT*nbSampleMT);
+    //On élmine les facteurs ( problème de précision (1000 échantillons uniquement))
+    if( Math.abs(factor)<0.1)
+    {
+        factor=0.0;
+    }
+    // On affiche les facteurs
+    document.writeln("Factor L=", parL,", M= ", parM,", VAL = ", factor, " <br/>");
+}
+
+function main() 
+{
+    // Pour chaque valeur de l
+    for(var l = 0; l < 6; ++l)
+    {
+        // Pour chaque valeur de m
+        for(var m = -l; m <=l ; ++m)
+        {
+            // On calcule le facteur
+            ComputeFactor(l,m);
+        }
+    }
+}
+</script>
+</head>
+
+<body onload="main();">
+</body>
+
+</html>

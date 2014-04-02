@@ -1,0 +1,714 @@
+
+<html>
+<head>
+<title>TP1 Partie1 Anis Benyoub</title>
+<!-- Import de la lib de math glMatrix -->
+<!-- Cette librarie provient de https://code.google.com/p/glmatrix/ -->
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="libtp2.js"></script>
+<script type="text/javascript" src="webgl-utils.js"></script>
+
+<!-- Declaration du fragment shader -->
+<script id="basicFragment" type="glsl/frag">
+    // Declaration de la précision des flottants
+    precision mediump float;
+    // Attributs interpolés par la pipeline WebGL
+    // Normale normalisée en espace monde
+    varying vec3 normal;
+    // Coordonnées de textures pour la sphere
+    varying vec2 texcoord;
+    // Direction de la lumière en coordonnées monde
+    varying vec3 light;
+    // Réfléctance de l'objet
+    uniform vec3 rho;
+    // Intensité lumineuse de la source de lumière
+    uniform float I;
+    void main(void) 
+    {
+        // Calcul de la lumière
+        gl_FragColor = vec4(rho,1.0);
+    }
+</script>
+
+<!-- Declaration du fragment shader -->
+<script id="lightSurface" type="glsl/frag">
+    // Declaration de la précision des flottants
+    precision mediump float;
+    // Attributs interpolés par la pipeline WebGL
+    // Normale normalisée en espace monde
+    varying vec3 normal;
+    // Coordonnées de textures pour la sphere
+    varying vec2 texcoord;
+    // position du fragment dans l'espace monde
+    varying vec3 ecPos;
+    // Couleur de l'eclairage surfacique
+    uniform vec3 rho;
+    // Nombre de fragment rééllement éclairant 
+    int nbActivePoints;
+    // Les points originaux éclairant
+    uniform vec3 originalPoints [4];
+    // Les points du polygone après decpiâge
+    vec3 projectedPoints [5];
+    // Constances nécessaires aux calcul
+    const float Intensity = 7.0;
+    const float EPSILON = 0.00001;
+    // Teste un point est dans l'hemisphère
+    bool testInHemisphere(vec3 parPoint)
+    {
+        return (dot(normal, (ecPos - parPoint))< EPSILON);
+    }
+
+    // Renvoie le poit d'intersection entre un plan et une droite
+    vec3 getIntersectionPoint(vec3 originVec, vec3 dirVec, vec3 planeNormal, vec3 planePoint)
+    {
+        float d = dot(planePoint-originVec, planeNormal)/dot(dirVec,normal);
+        return (originVec + d*dirVec);
+    }
+    // Fonction qui projete un polygonne dans l'ehemisphère d'un plan
+    bool projectSquare()
+    {
+        // Initialisation
+        int lastUnseen = -1;
+        int lastSeen = -1;
+        int nbPoints = 0;
+        bool inHemisphere[4];
+        // On va tester combien de points sont dans l'hemisphère 
+        // pour chacun des points
+        for(int i = 0; i < 4;++i)
+        {
+            if(i==4)
+                break;
+            // On sauvegarde certaines données pour les calculs suivants
+            if(testInHemisphere(originalPoints[i]))
+            {
+                nbPoints++;
+                inHemisphere[i] = true;
+                lastSeen = i;
+            }
+            else
+            {
+                inHemisphere[i] = false;
+                lastUnseen = i;
+            }
+        }
+        // Aucun points, fragment pas éclairé
+        if(nbPoints==0)
+        {
+            return false;
+        }
+        // Il n'y a qu'un point  donc la forme est un triangle
+        else if(nbPoints==1)
+        {
+            // 3 points
+            nbActivePoints = 3;
+            vec3 v1;
+            vec3 v2;
+            // On va constuire les triangle
+            if(lastSeen == 3)
+            {
+                v1 = originalPoints[3] - originalPoints[0];
+                v2 = originalPoints[3] - originalPoints[2];
+                projectedPoints[0] = getIntersectionPoint(originalPoints[3], v1, normal, ecPos);
+                projectedPoints[1] = getIntersectionPoint(originalPoints[3], v2, normal, ecPos);            
+                projectedPoints[2] = originalPoints[3];
+            }
+            else if (lastSeen == 0)
+            {
+                v1 = originalPoints[0] - originalPoints[3];
+                v2 = originalPoints[0] - originalPoints[1];
+                projectedPoints[0] = getIntersectionPoint(originalPoints[0], v1, normal, ecPos);
+                projectedPoints[1] = originalPoints[0];
+                projectedPoints[2] = getIntersectionPoint(originalPoints[0], v2, normal, ecPos);               
+            }
+            else if (lastSeen == 1)
+            {
+                v1 = originalPoints[1] - originalPoints[0];
+                v2 = originalPoints[1] - originalPoints[2];
+                projectedPoints[0] = getIntersectionPoint(originalPoints[1], v1, normal, ecPos);
+                projectedPoints[1] = originalPoints[1];
+                projectedPoints[2] = getIntersectionPoint(originalPoints[1], v2, normal, ecPos);           
+            }
+            else if (lastSeen == 2)
+            {
+                v1 = originalPoints[2] - originalPoints[1];
+                v2 = originalPoints[2] - originalPoints[3]; 
+                projectedPoints[0] = getIntersectionPoint(originalPoints[2], v1, normal, ecPos);
+                projectedPoints[1] = originalPoints[2];
+                projectedPoints[2] = getIntersectionPoint(originalPoints[2], v2, normal, ecPos);                 
+            }
+            return true;
+        }
+        // Deux points d'intersection => Un quadrilatère
+        else if(nbPoints == 2)
+        {
+            nbActivePoints = 4;
+
+            for(int i = 0; i < 4; i++)
+            {
+                if(inHemisphere[i])
+                {
+                    if(i == 0)
+                    {
+                        if( inHemisphere[3] )
+                        {
+                            vec3 v1 = originalPoints[0] - originalPoints[1];
+                            vec3 v2 = originalPoints[3] - originalPoints[2]; 
+                            projectedPoints[0] = originalPoints[0];
+                            projectedPoints[1] = getIntersectionPoint(originalPoints[0], v1, normal, ecPos);
+                            projectedPoints[2] = getIntersectionPoint(originalPoints[3], v2, normal, ecPos); 
+                            projectedPoints[3] = originalPoints[3];
+                        }
+                        else
+                        {
+                            vec3 v1 = originalPoints[0] - originalPoints[3];
+                            vec3 v2 = originalPoints[1] - originalPoints[2]; 
+                            projectedPoints[0] = originalPoints[0];
+                            projectedPoints[1] = originalPoints[1];
+                            projectedPoints[2] = getIntersectionPoint(originalPoints[1], v2, normal, ecPos); 
+                            projectedPoints[3] = getIntersectionPoint(originalPoints[0], v1, normal, ecPos);   
+                        }
+                    }
+                    else if(i == 1)
+                    {
+                        if( inHemisphere[0] )
+                        {
+                            vec3 v1 = originalPoints[1] - originalPoints[2];
+                            vec3 v2 = originalPoints[0] - originalPoints[3]; 
+                            projectedPoints[0] = originalPoints[0];
+                            projectedPoints[1] = originalPoints[1];
+                            projectedPoints[2] = getIntersectionPoint(originalPoints[1], v1, normal, ecPos); 
+                            projectedPoints[3] = getIntersectionPoint(originalPoints[0], v2, normal, ecPos); 
+                        }
+                        else
+                        {
+                            vec3 v1 = originalPoints[1] - originalPoints[0];
+                            vec3 v2 = originalPoints[2] - originalPoints[3]; 
+                            projectedPoints[0] = getIntersectionPoint(originalPoints[1], v1, normal, ecPos); 
+                            projectedPoints[1] = originalPoints[1];
+                            projectedPoints[2] = originalPoints[2];
+                            projectedPoints[3] = getIntersectionPoint(originalPoints[2], v2, normal, ecPos);                    
+                        }
+
+                    }
+                    else if(i == 2)
+                    {
+                        if( inHemisphere[1] )
+                        {
+                            vec3 v1 = originalPoints[1] - originalPoints[0];
+                            vec3 v2 = originalPoints[2] - originalPoints[3]; 
+                            projectedPoints[0] = getIntersectionPoint(originalPoints[1], v1, normal, ecPos); 
+                            projectedPoints[1] = originalPoints[1];
+                            projectedPoints[2] = originalPoints[2];
+                            projectedPoints[3] = getIntersectionPoint(originalPoints[2], v2, normal, ecPos); 
+                        }
+                        else
+                        {
+                            vec3 v1 = originalPoints[2] - originalPoints[1];
+                            vec3 v2 = originalPoints[3] - originalPoints[0]; 
+                            projectedPoints[0] = getIntersectionPoint(originalPoints[3], v2, normal, ecPos);                    
+                            projectedPoints[1] = getIntersectionPoint(originalPoints[2], v1, normal, ecPos); 
+                            projectedPoints[2] = originalPoints[2];
+                            projectedPoints[3] = originalPoints[3];
+                        }
+                    }
+                    else if(i == 3)
+                    {
+                        if( inHemisphere[2] )
+                        {
+                            vec3 v1 = originalPoints[2] - originalPoints[1];
+                            vec3 v2 = originalPoints[3] - originalPoints[0]; 
+                            projectedPoints[0] = getIntersectionPoint(originalPoints[3], v2, normal, ecPos); 
+                            projectedPoints[1] = getIntersectionPoint(originalPoints[2], v1, normal, ecPos);
+                            projectedPoints[2] = originalPoints[2];
+                            projectedPoints[3] = originalPoints[3];
+                        }
+                        else
+                        {
+                            vec3 v1 = originalPoints[0] - originalPoints[1];
+                            vec3 v2 = originalPoints[3] - originalPoints[2]; 
+                            projectedPoints[0] = originalPoints[0]; 
+                            projectedPoints[1] = getIntersectionPoint(originalPoints[0], v1, normal, ecPos); 
+                            projectedPoints[2] = getIntersectionPoint(originalPoints[3], v2, normal, ecPos); 
+                            projectedPoints[3] = originalPoints[3];         
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+        // Trois points => Pentagone
+        else if(nbPoints==3)
+        {
+            nbActivePoints = 5;
+            vec3 v1;
+            vec3 v2;
+            if(lastUnseen == 3)
+            {
+                v1 = originalPoints[3] - originalPoints[0];
+                v2 = originalPoints[3] - originalPoints[2];
+                projectedPoints[0] = originalPoints[0];
+                projectedPoints[1] = originalPoints[1];
+                projectedPoints[2] = originalPoints[2];
+                projectedPoints[3] = getIntersectionPoint(originalPoints[3], v1, normal, ecPos);            
+                projectedPoints[4] = getIntersectionPoint(originalPoints[3], v2, normal, ecPos);  
+            }
+            else if (lastUnseen == 0)
+            {
+                v1 = originalPoints[0] - originalPoints[1];
+                v2 = originalPoints[0] - originalPoints[3];
+                projectedPoints[0] = getIntersectionPoint(originalPoints[0], v2, normal, ecPos);               
+                projectedPoints[1] = getIntersectionPoint(originalPoints[0], v1, normal, ecPos); 
+                projectedPoints[2] = originalPoints[1];
+                projectedPoints[3] = originalPoints[2];
+                projectedPoints[4] = originalPoints[3];  
+            }
+            else if (lastUnseen == 1)
+            {
+                v1 = originalPoints[1] - originalPoints[0];
+                v2 = originalPoints[1] - originalPoints[2];
+                projectedPoints[0] = originalPoints[0]; 
+                projectedPoints[1] = getIntersectionPoint(originalPoints[1], v1, normal, ecPos);  
+                projectedPoints[2] = getIntersectionPoint(originalPoints[1], v2, normal, ecPos); 
+                projectedPoints[3] = originalPoints[2];        
+                projectedPoints[4] = originalPoints[3];  
+            }
+            else if (lastUnseen == 2)
+            {
+                v1 = originalPoints[2] - originalPoints[1];
+                v2 = originalPoints[2] - originalPoints[3];
+                projectedPoints[0] = originalPoints[0]; 
+                projectedPoints[1] = originalPoints[1]; 
+                projectedPoints[2] = getIntersectionPoint(originalPoints[2], v1, normal, ecPos);  
+                projectedPoints[3] = getIntersectionPoint(originalPoints[2], v2, normal, ecPos); 
+                projectedPoints[4] = originalPoints[3];        
+            }
+            return true;
+        }
+        else if(nbPoints==4)
+        {
+            nbActivePoints = 4;
+            projectedPoints[0] = originalPoints[0];
+            projectedPoints[1] = originalPoints[1];
+            projectedPoints[2] = originalPoints[2];
+            projectedPoints[3] = originalPoints[3];
+            return true;
+        }
+        else
+        {
+            // cas inconnu
+            return false;
+        }
+
+    }
+
+    // On calcule l'illumination
+    float ComputeLight(vec3 parP1, vec3 parP2)
+    {
+        float illumination = 0.0;
+        vec3 v1 = parP1 - ecPos;
+        vec3 v2 = parP2 - ecPos;
+        float nv1 = length(v1);
+        float nv2 = length(v2);
+        float teta = acos(dot(v1/nv1,v2/nv2));
+        vec3 T = cross(v1,v2);
+        T = T/length(T);
+        illumination=(teta*dot(T,normal));
+        illumination/=(2.0*3.14);
+        return illumination*Intensity;
+    }
+    //Calcule la contribution
+    vec3 getContribution()
+    {
+        float lightValue = 0.0;
+        for(int i = 0; i < 5;++i)
+        {
+            if(i==(nbActivePoints-1))
+                break;
+            lightValue+=ComputeLight(projectedPoints[i],projectedPoints[i+1]);
+
+        }
+        if(nbActivePoints==5)
+            lightValue+=ComputeLight(projectedPoints[4],projectedPoints[0]);
+        else if(nbActivePoints==4)
+            lightValue+=ComputeLight(projectedPoints[3],projectedPoints[0]);
+        else if(nbActivePoints==3)
+            lightValue+=ComputeLight(projectedPoints[2],projectedPoints[0]);
+        return (lightValue*rho);
+    }
+
+    void main(void) 
+    {
+        if(projectSquare())
+            // Calcul de la lumière
+            gl_FragColor = vec4(clamp(getContribution(),0.0,1.0),1.0);
+
+        else
+            gl_FragColor = vec4(0.0,0.0,0.0,1.0);
+    }
+</script>
+
+<!-- Declaration du vertex shader -->
+<script id="basicVertex" type="glsl/vertex">
+    //Attributs passés en attribute
+    // Position du vertex en espace objet
+    attribute vec3 VertexPosition;
+    // Normale du vertex en espace objet
+    attribute vec3 VertexNormal;
+    // Coordonnées textures pour le vertex
+    attribute vec2 VertexTexCoord;
+
+    // Matrice de projection    
+    uniform mat4 ProjMatrix;
+    // Matrice de vue
+    uniform mat4 ViewMatrix;
+    // Matrice de modele
+    uniform mat4 ModelMatrix;
+    // Matrice normale (Inverse de la matrice de modèle pour les normales)
+    uniform mat4 NormalMatrix;
+
+    // Données à Injecter dans le fragment shader
+    // Normale normalisée en espace monde
+    varying vec3 normal;
+    // Coordnnées texture
+    varying vec2 texcoord;
+
+    varying vec3 ecPos;
+
+    void main(void) 
+    {
+        ecPos = (ModelMatrix * vec4(VertexPosition,1.0)).xyz;
+        // Conversion en coordnnées clipping
+        gl_Position = ProjMatrix * ViewMatrix * vec4(ecPos,1.0);
+        // Normalisation et conversion en espace monde
+        normal = normalize(NormalMatrix*vec4(VertexNormal,0.0)).xyz;
+        // coordonnées de texture
+        texcoord = VertexTexCoord;
+    }
+</script>
+
+
+<script type="text/javascript">
+
+    // Variables gobales
+    var gl;
+    var canvas;
+
+    var delta = 0.0;
+    // Inputs
+    var currentlyPressedKeys = {};
+    // Camera 
+    var camera = [];
+    // Données sphères
+    var sceneObjects = [];
+    var sources = [];
+
+
+    function initCamera()
+    {
+        camera.projectionMatrix = mat4.create();
+        // On définie la matrice de projection
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 1000.0, camera.projectionMatrix);
+        // On définie la matrice de vue
+        camera.viewMatrix = mat4.create();
+        mat4.identity(camera.viewMatrix);
+        // mat4.rotateY(camera.viewMatrix,3.14/2,camera.viewMatrix);
+        camera.isOutDated =  true;
+    }
+
+    function initShaderData(parProgram, parObj)
+    {
+
+        // On bind le vertex buffer object de position
+        parProgram.vertexPositionAttribute = gl.getAttribLocation(parProgram, "VertexPosition");
+        
+        // On bind le vertex buffer object de normale
+        parProgram.vertexNormalAttribute = gl.getAttribLocation(parProgram, "VertexNormal");
+
+        // On bind le vertex buffer object de tex coord
+        parProgram.vertexTexCoordAttribute = gl.getAttribLocation(parProgram, "VertexTexCoord");
+
+        // On récupère l'index la matrice de projection
+        parProgram.projMatrix = gl.getUniformLocation(parProgram, "ProjMatrix");
+        // On récupère l'index la matrice de vue
+        parProgram.viewMatrix = gl.getUniformLocation(parProgram, "ViewMatrix");
+        // On récupère l'index de la normal matrix
+        parProgram.normalMatrix = gl.getUniformLocation(parProgram, "NormalMatrix");
+
+        // On récupère l'index la matrice de modele
+        parProgram.modelMatrix = gl.getUniformLocation(parProgram, "ModelMatrix");
+
+        // On récupère l'index de la reflectance
+        parProgram.colorUniform = gl.getUniformLocation(parProgram, "rho");
+
+        // Injection de la projection matrix
+        gl.uniformMatrix4fv(parProgram.projMatrix, false, camera.projectionMatrix);
+
+        //Injection de s données de réfléctance
+        gl.uniform3fv(parProgram.colorUniform, parObj.colorVal);   
+    }
+
+    function injectQuadData(parShader, parColor, parP1, parP2, parP3, parP4)
+    {
+        gl.uniform3fv(gl.getUniformLocation(parShader, "originalPoints[0]"), parP1);
+        gl.uniform3fv(gl.getUniformLocation(parShader, "originalPoints[1]"), parP2);
+        gl.uniform3fv(gl.getUniformLocation(parShader, "originalPoints[2]"), parP3);
+        gl.uniform3fv(gl.getUniformLocation(parShader, "originalPoints[3]"), parP4);
+
+        gl.uniform3fv(parShader.colorUniform, parColor);  
+
+    }
+    function injectQuad(parShader)
+    {
+        if(camera.isOutDated)
+        {  
+            // Injection de la view matrix
+            gl.uniformMatrix4fv(parShader.viewMatrix, false, camera.viewMatrix);
+
+        }
+    }
+    function injectGenericUniforms(parShader, parColor, parP1, parP2, parP3, parP4)
+    {
+        injectQuadData(parShader, parColor, parP1, parP2, parP3, parP4);
+        
+        if(camera.isOutDated)
+        {  
+            // Injection de la view matrix
+            gl.uniformMatrix4fv(parShader.viewMatrix, false, camera.viewMatrix);
+
+        }
+    }
+
+    function injectSpecificUniforms(parObj) 
+    {
+        if(parObj.isOutDated)
+        {
+            //Injection de la model matrix
+            gl.uniformMatrix4fv(parObj.shaderProgram.modelMatrix, false, parObj.modelMatrix);
+            parObj.isOutDated = false;
+
+            // Injection de la normal matrix
+            var normalMatrix = mat4.create();
+            mat4.inverse(parObj.modelMatrix,normalMatrix);
+            gl.uniformMatrix4fv(parObj.shaderProgram.normalMatrix, false, normalMatrix);
+        }
+    }
+
+    function createScene() 
+    {
+        // On crée les sphères
+        var sphereOne = createSphere(10,[-30 , -10,-100], [0.3, 0.5, 0.75],200);
+        sphereOne.shaderProgram = generateProgram("basicVertex", "lightSurface");
+        sphereOne.modelMatrix = mat4.create();
+        mat4.identity(sphereOne.modelMatrix);
+        mat4.translate(sphereOne.modelMatrix,sphereOne.position);
+        initShaderData(sphereOne.shaderProgram, sphereOne);
+        sphereOne.isOutDated = true;
+
+        sceneObjects.push(sphereOne);
+
+
+        // // On crée les sphères
+        var sphereTwo = createSphere(10,[30, -10,-100],[1.0, 0.5, 0.75],200);
+        sphereTwo.shaderProgram = generateProgram("basicVertex", "lightSurface");
+        sphereTwo.modelMatrix = mat4.create();
+        mat4.identity(sphereTwo.modelMatrix);
+        mat4.translate(sphereTwo.modelMatrix,sphereTwo.position);
+        initShaderData(sphereTwo.shaderProgram, sphereTwo);
+        sphereTwo.isOutDated = true;
+
+        sceneObjects.push(sphereTwo);
+        
+    
+        // // On crée les sphères
+        var sphereThree = createSphere(10,[0, -10,-100],[0.2, 0.5, 0.3],200);
+        sphereThree.shaderProgram = generateProgram("basicVertex", "lightSurface");
+        sphereThree.modelMatrix = mat4.create();
+        mat4.identity(sphereThree.modelMatrix);
+        mat4.translate(sphereThree.modelMatrix,sphereThree.position);
+        initShaderData(sphereThree.shaderProgram, sphereThree);
+        sphereThree.isOutDated = true;
+
+        sceneObjects.push(sphereThree);
+
+        var sphereFour = createSphere(10,[-60, -10,-100],[0.2, 0.5, 0.3],200);
+        sphereFour.shaderProgram = generateProgram("basicVertex", "lightSurface");
+        sphereFour.modelMatrix = mat4.create();
+        mat4.identity(sphereFour.modelMatrix);
+        mat4.translate(sphereFour.modelMatrix,sphereFour.position);
+        initShaderData(sphereFour.shaderProgram, sphereFour);
+        sphereFour.isOutDated = true;
+
+        sceneObjects.push(sphereFour);
+
+
+        var sphereFive = createSphere(10,[60, -10,-100],[0.2, 0.5, 0.3],200);
+        sphereFive.shaderProgram = generateProgram("basicVertex", "lightSurface");
+        sphereFive.modelMatrix = mat4.create();
+        mat4.identity(sphereFive.modelMatrix);
+        mat4.translate(sphereFive.modelMatrix,sphereFive.position);
+        initShaderData(sphereFive.shaderProgram, sphereFive);
+        sphereFive.isOutDated = true;
+
+        sceneObjects.push(sphereFive);
+
+        // // On crée les sphères
+        var plan = createQuad([-100, -20, -150], [100, -20, -150], [-100, -20, -50], [100, -20, -50],  [1.0, 1.0, 1.0]);
+        plan.shaderProgram = generateProgram("basicVertex", "lightSurface");
+        plan.modelMatrix = mat4.create();
+        mat4.identity(plan.modelMatrix);
+        mat4.translate(plan.modelMatrix,plan.position);
+        initShaderData(plan.shaderProgram, plan);
+        plan.isOutDated = true;
+
+        sceneObjects.push(plan);
+
+        var sourceLumiere1 = createQuad([-100, -20, -120], [-100, 20, -120],  [-100, -20, -80],[-100, 20, -80],  [0.066, 1.0, 0.066]);
+        sourceLumiere1.shaderProgram = generateProgram("basicVertex", "basicFragment");
+        sourceLumiere1.modelMatrix = mat4.create();
+        mat4.identity(sourceLumiere1.modelMatrix);
+        mat4.translate(sourceLumiere1.modelMatrix,sourceLumiere1.position);
+        initShaderData(sourceLumiere1.shaderProgram, sourceLumiere1);
+        sourceLumiere1.isOutDated = true;
+
+        sources.push(sourceLumiere1);
+
+        var sourceLumiere2 = createQuad([100, -20, -120], [100, 20, -120],  [100, -20, -80],[100, 20, -80],  [1.0, 0.066, 0.066]);
+        sourceLumiere2.shaderProgram = generateProgram("basicVertex", "basicFragment");
+        sourceLumiere2.modelMatrix = mat4.create();
+        mat4.identity(sourceLumiere2.modelMatrix);
+        mat4.translate(sourceLumiere2.modelMatrix,sourceLumiere2.position);
+        initShaderData(sourceLumiere2.shaderProgram, sourceLumiere2);
+        sourceLumiere2.isOutDated = true;
+
+        sources.push(sourceLumiere2);
+
+        var sourceLumiere3 = createQuad([20, -20, -150], [20, 20, -150],  [-20, -20, -150],[-20, 20, -150],  [0.066, 0.066, 1.0]);
+        sourceLumiere3.shaderProgram = generateProgram("basicVertex", "basicFragment");
+        sourceLumiere3.modelMatrix = mat4.create();
+        mat4.identity(sourceLumiere3.modelMatrix);
+        mat4.translate(sourceLumiere3.modelMatrix,sourceLumiere3.position);
+        initShaderData(sourceLumiere3.shaderProgram, sourceLumiere3);
+        sourceLumiere3.isOutDated = true;
+
+        sources.push(sourceLumiere3);
+
+    }
+
+    function renderSources()
+    {
+        for(var i = 0; i < sources.length;++i)
+        {
+            bindProgram(sources[i].shaderProgram);
+            injectQuad(sources[i].shaderProgram);
+            drawObject(sources[i]);
+            unbindProgram();
+        }   
+    }
+    function drawObject(parObj)
+    {
+        // ON bind le pos buffer 
+        gl.enableVertexAttribArray(parObj.shaderProgram.vertexPositionAttribute);
+        gl.bindBuffer(gl.ARRAY_BUFFER, parObj.vertexPositionBuffer);
+        gl.vertexAttribPointer(parObj.shaderProgram.vertexPositionAttribute, parObj.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        // ON bind le normal buffer 
+        gl.enableVertexAttribArray(parObj.shaderProgram.vertexNormalAttribute);
+        gl.bindBuffer(gl.ARRAY_BUFFER, parObj.vertexNormalBuffer);
+        gl.vertexAttribPointer(parObj.shaderProgram.vertexNormalAttribute, parObj.vertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0); 
+
+        // ON bind le texcoord buffer 
+        gl.enableVertexAttribArray(parObj.shaderProgram.vertexTexCoordAttribute);
+        gl.bindBuffer(gl.ARRAY_BUFFER, parObj.vertexTextureCoordBuffer);
+        gl.vertexAttribPointer(parObj.shaderProgram.vertexTexCoordAttribute, parObj.vertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);                
+
+        // On bind l'IBO
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, parObj.vertexIndexBuffer);
+        // On injecte les données spécifique à la sphère
+        injectSpecificUniforms(parObj) 
+        // On déssine la sphère
+        gl.drawElements(gl.TRIANGLES, parObj.vertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+        gl.disableVertexAttribArray(parObj.shaderProgram.vertexPositionAttribute);
+        gl.disableVertexAttribArray(parObj.shaderProgram.vertexNormalAttribute);
+        gl.disableVertexAttribArray(parObj.shaderProgram.vertexTexCoordAttribute);
+
+    }
+    function renderLight(parColor, parP1, parP2, parP3, parP4)
+    {
+        for(var i = 0; i < sceneObjects.length;++i)
+        {
+            bindProgram(sceneObjects[i].shaderProgram);
+            injectGenericUniforms(sceneObjects[i].shaderProgram, parColor, parP1, parP2, parP3, parP4);
+            drawObject(sceneObjects[i]);
+            unbindProgram();
+        }   
+        for(var i = 0; i < sources.length;++i)
+        {
+            bindProgram(sources[i].shaderProgram);
+            injectQuad(sources[i].shaderProgram, parColor, parP1, parP2, parP3, parP4);
+            drawObject(sources[i]);
+            unbindProgram();
+        }    
+    }
+    function drawScene() 
+    {
+        // On définie le viewport
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        // On injecte les données communes
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        // On rend une fois par quad lumineux un peu comme du defered shading 
+        gl.blendEquation (gl.FUNC_ADD);
+        gl.blendFunc (gl.ONE, gl.ONE);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        renderLight([0.2, 1.0, 0.2], [-100, 20, -120], [-100, -20, -120], [-100, -20, -80],[-100, 20, -80])
+        gl.enable (gl.BLEND);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        renderLight([1.0, 0.2, 0.2],[100, -20, -80],[100, -20, -120], [100, 20, -120],  [100, 20, -80]);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        renderLight([0.2, 0.2, 1.0],   [-20, -20, -150],  [-20, 20, -150],  [20, 20, -150],[20, -20, -150]);
+        gl.disable (gl.BLEND);
+        if(camera.isOutDated)
+        {
+            camera.isOutDated = false;
+        }
+    }
+
+    function initRender()
+    {
+        gl.clearColor(0.5, 0.5, 0.5, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+    }
+
+
+    function renderLoop()
+    {
+        window.requestAnimFrame(renderLoop);
+        drawScene();        
+    }
+    function main() 
+    {
+        // Récupération du canvas
+        canvas = document.getElementById("canvas");
+
+        // Initialisation du contexte WebGL
+        initGL(canvas);
+
+        // Initialisation de la camera
+        initCamera();
+
+        // Initialisation de la scene
+        createScene();
+
+        initRender();
+        renderLoop();
+
+
+    }
+
+</script>
+</head>
+
+<body onload="main();">
+    <canvas id="canvas" style="border: none;" width="1280" height="720"></canvas>
+</body>
+
+</html>

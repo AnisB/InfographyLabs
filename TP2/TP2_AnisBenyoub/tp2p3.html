@@ -1,0 +1,375 @@
+
+<html>
+<head>
+<title>TP1 Partie1 Anis Benyoub</title>
+<!-- Import de la lib de math glMatrix -->
+<!-- Cette librarie provient de https://code.google.com/p/glmatrix/ -->
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="libtp2.js"></script>
+<script type="text/javascript" src="webgl-utils.js"></script>
+
+<!-- Declaration du fragment shader -->
+<script id="basicFragment" type="glsl/frag">
+    // Declaration de la précision des flottants
+    precision mediump float;
+    // Attributs interpolés par la pipeline WebGL
+    // Normale normalisée en espace monde
+    varying vec3 normal;
+    // Coordonnées de textures pour la sphere
+    varying vec2 texcoord;
+    // Direction de la lumière en coordonnées monde
+    varying vec3 light;
+    // Réfléctance de l'objet
+    uniform vec3 rho;
+    // Intensité lumineuse de la source de lumière
+    uniform float I;
+    // Les couleurs injevtées
+    uniform float redCoefficients[9];
+    uniform float greenCoefficients[9];
+    uniform float blueCoefficients[9];
+    // Coefficient constants
+    const float c1 = 0.429043;
+    const float c2 = 0.511664;
+    const float c3 = 0.743125;
+    const float c4 = 0.886227;
+    const float c5 = 0.247708;
+
+
+    // Clacul de l'eclairage à un point donné
+    float computeEVal(float parCoeff[9])
+    {
+        float x = normal.x;
+        float y = normal.y;
+        float z = normal.z;
+        float x2 = normal.x*normal.x;
+        float y2 = normal.y*normal.y;
+        float z2 = normal.z*normal.z;
+        return (c1*parCoeff[8]*(x2-y2)+c3*parCoeff[6]*z2+c4*parCoeff[0]-c5*parCoeff[6]
+                +2.0*c1*(parCoeff[4]*x*y+parCoeff[7]*x*z+parCoeff[5]*y*z)
+                +2.0*c2*(parCoeff[3]*x+parCoeff[1]*y+parCoeff[2]*z));
+    }
+    void main(void) 
+    {
+        float Ered = computeEVal(redCoefficients);
+        float Egreen = computeEVal(greenCoefficients);
+        float Eblue = computeEVal(blueCoefficients);
+        // Calcul de la lumière
+        gl_FragColor = vec4(Ered,Egreen,Eblue,1.0);
+    }
+</script>
+
+<!-- Declaration du vertex shader -->
+<script id="basicVertex" type="glsl/vertex">
+    //Attributs passés en attribute
+    // Position du vertex en espace objet
+    attribute vec3 VertexPosition;
+    // Normale du vertex en espace objet
+    attribute vec3 VertexNormal;
+    // Coordonnées textures pour le vertex
+    attribute vec2 VertexTexCoord;
+
+    // Matrice de projection    
+    uniform mat4 ProjMatrix;
+    // Matrice de vue
+    uniform mat4 ViewMatrix;
+    // Matrice de modele
+    uniform mat4 ModelMatrix;
+    // Matrice normale (Inverse de la matrice de modèle pour les normales)
+    uniform mat4 NormalMatrix;
+    // Direction de la lumière en espace monde
+    uniform vec3 LightDirection;
+
+
+    // Données à Injecter dans le fragment shader
+    // Normale normalisée en espace monde
+    varying vec3 normal;
+    // Vecteur lumière en espace monde
+    varying vec3 light;
+    varying float distance;
+    // Coordnnées texture
+    varying vec2 texcoord;
+    void main(void) 
+    {
+        // Conversion en coordnnées clipping
+        vec4 ecPos = ModelMatrix * vec4(VertexPosition, 1.0);
+        gl_Position = ProjMatrix * ViewMatrix * ecPos;
+        // Normalisation du vecteur de lumière (peut être fait dans le CPU pour éviter de le refaire)
+        light = (LightDirection-ecPos.xyz);
+        light=normalize(light);
+        // Normalisation et conversion en espace monde
+        normal = normalize(NormalMatrix*vec4(VertexNormal,0.0)).xyz;
+        // coordonnées de texture
+        texcoord = VertexTexCoord;
+    }
+</script>
+
+<script type="text/javascript">
+
+    // Variables gobales
+    var gl;
+    var canvas;
+
+    var delta = 0.0;
+    // Inputs
+    var currentlyPressedKeys = {};
+    // Camera 
+    var camera = [];
+    // Données sphères
+    var sceneObjects = [];
+    var isRendering = false;
+
+
+    function initCamera()
+    {
+        camera.projectionMatrix = mat4.create();
+        // On définie la matrice de projection
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 1000.0, camera.projectionMatrix);
+        // On définie la matrice de vue
+        camera.viewMatrix = mat4.create();
+        mat4.identity(camera.viewMatrix);
+        // mat4.rotate(camera.viewMatrix, 3.14/2, [1,0,0],camera.viewMatrix);
+
+
+        camera.isOutDated =  true;
+    }
+
+    function initShaderData(parProgram, parObj)
+    {
+
+        // On bind le vertex buffer object de position
+        parProgram.vertexPositionAttribute = gl.getAttribLocation(parProgram, "VertexPosition");
+        
+        // On bind le vertex buffer object de normale
+        parProgram.vertexNormalAttribute = gl.getAttribLocation(parProgram, "VertexNormal");
+
+        // On bind le vertex buffer object de tex coord
+        parProgram.vertexTexCoordAttribute = gl.getAttribLocation(parProgram, "VertexTexCoord");
+
+        // On récupère l'index la matrice de projection
+        parProgram.projMatrix = gl.getUniformLocation(parProgram, "ProjMatrix");
+        // On récupère l'index la matrice de vue
+        parProgram.viewMatrix = gl.getUniformLocation(parProgram, "ViewMatrix");
+        // On récupère l'index de la normal matrix
+        parProgram.normalMatrix = gl.getUniformLocation(parProgram, "NormalMatrix");
+
+        // On récupère l'index la matrice de modele
+        parProgram.modelMatrix = gl.getUniformLocation(parProgram, "ModelMatrix");
+
+        // On récupère l'index de la reflectance
+        parProgram.colorUniform = gl.getUniformLocation(parProgram, "rho");
+        // On récupère l'index de la variable uniform d'intensité
+        parProgram.lightIntensity = gl.getUniformLocation(parProgram, "I");
+        // On récupère l'index de la variable uniform de direction lumière
+        parProgram.lightDirection = gl.getUniformLocation(parProgram, "LightDirection");
+
+        // Injection de la projection matrix
+        gl.uniformMatrix4fv(parProgram.projMatrix, false, camera.projectionMatrix);
+
+        //Injection de s données de réfléctance
+        gl.uniform3fv(parProgram.colorUniform, parObj.colorVal);
+
+        // Injection des données de lumières
+        gl.uniform1f(parProgram.lightIntensity, 3.14*2.0);     
+    }
+
+    // Injection des coefficients des harmonique sphériques
+    function injectEnvironementCoeffs(parObj, parRedC, parGreenC, parBlueC)
+    {
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[0]"), parRedC[0]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[1]"), parRedC[1]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[2]"), parRedC[2]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[3]"), parRedC[3]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[4]"), parRedC[4]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[5]"), parRedC[5]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[6]"), parRedC[6]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[7]"), parRedC[7]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "redCoefficients[8]"), parRedC[8]);
+
+
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[0]"), parGreenC[0]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[1]"), parGreenC[1]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[2]"), parGreenC[2]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[3]"), parGreenC[3]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[4]"), parGreenC[4]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[5]"), parGreenC[5]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[6]"), parGreenC[6]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[7]"), parGreenC[7]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "greenCoefficients[8]"), parGreenC[8]);
+
+
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[0]"), parBlueC[0]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[1]"), parBlueC[1]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[2]"), parBlueC[2]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[3]"), parBlueC[3]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[4]"), parBlueC[4]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[5]"), parBlueC[5]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[6]"), parBlueC[6]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[7]"), parBlueC[7]);
+        gl.uniform1f(gl.getUniformLocation(parObj.shaderProgram, "blueCoefficients[8]"), parBlueC[8]);
+    }
+    function injectGenericUniforms(parShader)
+    {
+
+        if(camera.isOutDated)
+        {  
+            // Injection de la view matrix
+            gl.uniformMatrix4fv(parShader.viewMatrix, false, camera.viewMatrix);
+
+        }
+    }
+
+    function injectSpecificUniforms(parObj) 
+    {
+        if(parObj.isOutDated)
+        {
+            //Injection de la model matrix
+            gl.uniformMatrix4fv(parObj.shaderProgram.modelMatrix, false, parObj.modelMatrix);
+            parObj.isOutDated = false;
+
+            // Injection de la normal matrix
+            var normalMatrix = mat4.create();
+            mat4.inverse(parObj.modelMatrix,normalMatrix);
+            gl.uniformMatrix4fv(parObj.shaderProgram.normalMatrix, false, normalMatrix);
+        }
+
+
+
+    }
+
+    function createScene() 
+    {
+        // On crée les sphères
+        var sphereOne = createSphere(10,[-25, -10,-100], [0.3, 0.5, 0.75],20);
+        sphereOne.shaderProgram = generateProgram("basicVertex", "basicFragment");
+        sphereOne.modelMatrix = mat4.create();
+        mat4.identity(sphereOne.modelMatrix);
+        mat4.translate(sphereOne.modelMatrix,sphereOne.position);
+        initShaderData(sphereOne.shaderProgram, sphereOne);
+        injectEnvironementCoeffs(sphereOne,[0.79, 0.39,-0.34,-0.29,-0.11,-0.26,-0.16,0.56,0.21], 
+                                            [0.44,0.35,-0.18,-0.06,-0.05,-0.22,-0.09,0.21,-0.05],
+                                            [0.54,0.60,-0.27,0.01,-0.12,-0.47,-0.15,0.14,-0.3]);
+        sphereOne.isOutDated = true;
+
+        sceneObjects.push(sphereOne);
+
+
+        // // On crée les sphères
+        var sphereTwo = createSphere(10,[25, -10,-100],[1.0, 0.5, 0.75],20);
+        sphereTwo.shaderProgram = generateProgram("basicVertex", "basicFragment");
+        sphereTwo.modelMatrix = mat4.create();
+        mat4.identity(sphereTwo.modelMatrix);
+        mat4.translate(sphereTwo.modelMatrix,sphereTwo.position);
+        initShaderData(sphereTwo.shaderProgram, sphereTwo);
+        sphereTwo.isOutDated = true;
+        injectEnvironementCoeffs(sphereTwo,[0.38, 0.29,0.04,-0.10,-0.06,0.01,-0.09,-0.06,0.02], 
+                                            [0.43,0.36,0.03,-0.10,-0.06,-0.01,-0.13,-0.05,-0.00],
+                                            [0.45,0.41,0.01,-0.09,-0.04,-0.05,-0.15,-0.04,-0.05]);
+        sceneObjects.push(sphereTwo);
+        
+    
+        // // On crée les sphères
+        var sphereThree = createSphere(10,[0, -10,-100],[0.2, 0.5, 0.3],20);
+        sphereThree.shaderProgram = generateProgram("basicVertex", "basicFragment");
+        sphereThree.modelMatrix = mat4.create();
+        mat4.identity(sphereThree.modelMatrix);
+        mat4.translate(sphereThree.modelMatrix,sphereThree.position);
+        initShaderData(sphereThree.shaderProgram, sphereThree);
+        sphereThree.isOutDated = true;
+        injectEnvironementCoeffs(sphereThree,[0.36, 0.18,-0.02,0.03,0.02,-0.05,-0.09,0.01,-0.08], 
+                                            [0.26,0.14,-0.01,0.02,0.01,-0.03,-0.08,-0.00,-0.06],
+                                            [0.23,0.13,0.0,0.01,0.00,-0.01,-0.07,-0.00,-0.00]);
+
+
+        sceneObjects.push(sphereThree);
+
+    }
+    function drawObject(parObj)
+    {
+        // ON bind le pos buffer 
+        gl.enableVertexAttribArray(parObj.shaderProgram.vertexPositionAttribute);
+        gl.bindBuffer(gl.ARRAY_BUFFER, parObj.vertexPositionBuffer);
+        gl.vertexAttribPointer(parObj.shaderProgram.vertexPositionAttribute, parObj.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        // ON bind le normal buffer 
+        gl.enableVertexAttribArray(parObj.shaderProgram.vertexNormalAttribute);
+        gl.bindBuffer(gl.ARRAY_BUFFER, parObj.vertexNormalBuffer);
+        gl.vertexAttribPointer(parObj.shaderProgram.vertexNormalAttribute, parObj.vertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0); 
+
+        // ON bind le texcoord buffer 
+        gl.enableVertexAttribArray(parObj.shaderProgram.vertexTexCoordAttribute);
+        gl.bindBuffer(gl.ARRAY_BUFFER, parObj.vertexTextureCoordBuffer);
+        gl.vertexAttribPointer(parObj.shaderProgram.vertexTexCoordAttribute, parObj.vertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);                
+
+        // On bind l'IBO
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, parObj.vertexIndexBuffer);
+        // On injecte les données spécifique à la sphère
+        injectSpecificUniforms(parObj) 
+        // On déssine la sphère
+        gl.drawElements(gl.TRIANGLES, parObj.vertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+        gl.disableVertexAttribArray(parObj.shaderProgram.vertexPositionAttribute);
+        gl.disableVertexAttribArray(parObj.shaderProgram.vertexNormalAttribute);
+        gl.disableVertexAttribArray(parObj.shaderProgram.vertexTexCoordAttribute);
+
+    }
+
+    function drawScene() 
+    {
+        // On définie le viewport
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        // On injecte les données communes
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        for(var i = 0; i < sceneObjects.length;++i)
+        {
+            bindProgram(sceneObjects[i].shaderProgram);
+            injectGenericUniforms(sceneObjects[i].shaderProgram);
+            drawObject(sceneObjects[i]);
+            unbindProgram();
+        }    
+        if(camera.isOutDated)
+        {
+            camera.isOutDated = false;
+        }
+    }
+
+    function initRender()
+    {
+        isRendering = true;
+        gl.clearColor(0.0, 0.0, 0.0, 0.0);
+        gl.enable(gl.DEPTH_TEST);
+    }
+
+
+    function renderLoop()
+    {
+        window.requestAnimFrame(renderLoop);
+        drawScene();        
+    }
+    function main() 
+    {
+        // Récupération du canvas
+        canvas = document.getElementById("canvas");
+
+        // Initialisation du contexte WebGL
+        initGL(canvas);
+
+        // Initialisation de la camera
+        initCamera();
+
+        // Initialisation de la scene
+        createScene();
+
+        initRender();
+        renderLoop();
+
+
+    }
+
+</script>
+</head>
+
+<body onload="main();">
+    <canvas id="canvas" style="border: none;" width="1280" height="720"></canvas>
+</body>
+
+</html>

@@ -1,0 +1,249 @@
+
+<html>
+<head>
+<title>TP3 Partie2  - Cosine sampling - Anis Benyoub</title>
+<script type="text/javascript" src="cpulib.js"></script>
+
+<script type="text/javascript">
+
+
+// Constances
+var VERY_BIG = 100000.0
+var DIFF = 0.0
+var SPEC = 1.0
+var REFR = 2.0
+var width = 256
+var height = 256
+var samples = 50
+var maxPathSize = 2
+var focalDistance = 10
+var PI = 3.14
+var angleView = 29.5;
+var ratio = width/height;
+
+// Position de la camera
+var cameraPos  = Vector(50, 52, 295.6)
+// Direction de la camera
+var cameraDirection = Vector(0.0, -0.042612, -1.0)
+
+// Declaration des sphères
+var spheres = [
+    Sphere(VERY_BIG, Vector( VERY_BIG+1,40.8,81.6), Vector(0.0,0.0,0.0), Vector(.75,.25,.25),DIFF), 
+   Sphere(VERY_BIG, Vector(-VERY_BIG+99,40.8,81.6),Vector(0.0,0.0,0.0),Vector(.25,.25,.75),DIFF), 
+   Sphere(VERY_BIG, Vector(50,40.8, VERY_BIG),     Vector(0.0,0.0,0.0),Vector(.75,.75,.75),DIFF), 
+   Sphere(VERY_BIG, Vector(50, VERY_BIG, 81.6),    Vector(0.0,0.0,0.0),Vector(.75,.75,.75),DIFF), 
+   Sphere(VERY_BIG, Vector(50,-VERY_BIG+81.6,81.6),Vector(0.0,0.0,0.0),Vector(.75,.75,.75),DIFF),
+   Sphere(16.5,Vector(27,16.5,47),       Vector(0.0,0.0,0.0),   Vector(0.99,0.99,0.99), DIFF), 
+   Sphere(16.5,Vector(73,16.5,78),       Vector(0.0,0.0,0.0),   Vector(0.99,0.99,0.99), DIFF), 
+   Sphere(10.0,Vector(50,73.33,81.6),       Vector(12.0,12.0,12.0), Vector(0,0,0), DIFF) 
+ ]
+// Affecte la couleur d'un pixel
+function SetPixelColor(parImage, parColor, parWidth, parHeight)
+{
+    var pixel_index = ( parHeight - 1) * width + parWidth;
+    parImage[3 * pixel_index + 0] = parColor[0];
+    parImage[3 * pixel_index + 1] = parColor[1];
+    parImage[3 * pixel_index + 2] = parColor[2];
+}
+
+
+// Intersection avec une sphère
+function IntersectSphere(parRayon, parSphere)
+{
+    // Donnée d'intersection
+    var intersect = [];
+    intersect.isValid = false;
+
+    // Données de l'equation de second degrès 
+    var A = dot(parRayon.direction,parRayon.direction);
+    var B = 2*dot(substract(parRayon.origin,parSphere.position),parRayon.direction);
+    var C = dot(substract(parRayon.origin,parSphere.position),substract(parRayon.origin,parSphere.position)) - parSphere.rayon*parSphere.rayon;
+    
+    // Calcul du determinant
+    var delta = B*B-4*A*C;
+    // test positif
+    if(delta<-EPSILON)
+    {
+        return intersect
+    }
+    //resultat nul
+    else if(delta==0)
+    {   
+        var t = -B/2.0*A; 
+        if(t>0)
+        {
+            intersect.isValid = true;
+            intersect.distance = t;
+            intersect.position = addV(parRayon.origin,scale(parRayon.direction,finalt));
+            intersect.colorVal = parSphere.colorVal;
+            intersect.normal = normalize(substract(intersect.position,parSphere.position));
+        }
+    }
+    // Delta non nul
+    else
+    {
+        // Les deux solutions
+        var t1 = (-B - Math.sqrt(delta))/(2*A);
+        var t2 = (-B + Math.sqrt(delta))/(2*A);
+        // On garde le minimum positif
+        var finalt = Infinity;
+        if (t1 > 0)
+            finalt = Math.min(finalt, t1);
+        if (t2 > 0)
+            finalt = Math.min(finalt, t2);
+        intersect.distance = finalt;
+        if(finalt>EPSILON && finalt!=Infinity)
+        {
+            // On défini l'intersection
+            intersect.isValid = true;
+            intersect.colorVal = parSphere.colorVal;
+            intersect.position = addV(parRayon.origin,scale(parRayon.direction,finalt));
+            intersect.normal = substract(intersect.position,parSphere.position);
+
+            if((t1>0 && t2<0)||(t2>0 && t1<0))
+                intersect.normal = negate(intersect.normal);
+            intersect.normal = normalize(intersect.normal);
+        }
+    }
+    return intersect;
+}
+
+// PDF cosine
+function pdf(parIntersect)
+{
+    var val = -1.0
+    var phi = 2*PI*Math.random();
+    var teta = Math.acos(Math.sqrt(Math.random()));
+        
+    return RotateEuler(parIntersect.normal, teta, phi);
+}
+
+function traceRay(parRayon)
+{
+    // On intersecte avec tous les objets de la scene
+    var finalIntersect = [];
+    finalIntersect.distance = Infinity;
+    finalIntersect.normal = Vector(0, 0,0);
+    finalIntersect.isValid = false;
+    finalIntersect.primIndex = -1;
+    var nbSphere = spheres.length;
+    for (var index = 0; index < nbSphere; ++index) 
+    {
+        var currentPrim = spheres[index];
+        intersection = IntersectSphere(parRayon, spheres[index]);
+        if(intersection.isValid)
+        {
+            // On garde la plus petite
+            if(intersection.distance<finalIntersect.distance)
+            {
+                finalIntersect = intersection;
+                finalIntersect.primIndex = index;
+            }
+        }
+    }
+    return finalIntersect
+}
+function shade(parIntersection, samp)
+{
+    // La contribution lumineuse
+    var color = Vector(0, 0, 0);
+    if(parIntersection.isValid)
+    {
+        if(isNotNil(spheres[parIntersection.primIndex].emission))
+        {
+            color = spheres[parIntersection.primIndex].emission
+        }
+        else
+        {
+            if(samp == 0)
+            {
+                return color;
+            }
+            var omega_i = pdf(parIntersection)
+            var newRay = Ray(addV(parIntersection.position, scale(parIntersection.normal, EPSILON)), omega_i)
+            color =  addV(color,mult(scale(shade(traceRay(newRay),samp-1),1.0),spheres[parIntersection.primIndex].color))
+        }
+    }
+    return color;
+}
+
+function toneMap(parX)
+{
+    return Math.floor(Math.pow(clamp(parX), 1/2.2) *255 + 0.5);
+}
+
+function main() 
+{
+    var cameraRay = Ray(cameraPos, normalize(cameraDirection));
+
+    // Les deux vecteurs de l'ecran X et Y
+    var zDir = normalize(cameraDirection)
+    var yDir  = cross(zDir ,Vector(1.0, 0.0, 0.0));
+    yDir=normalize(yDir);
+
+    var xDir = normalize(cross(yDir,zDir));
+
+    var hauteurEcran = Math.tan(angleView*3.14/(2.0*180))*focalDistance;
+    // On défini le centre de l'ecran
+    var dirVec = scale(zDir, focalDistance);
+    var centreEcran = addV(cameraPos, dirVec);
+    // Coin supérieur gauche
+    var pointGauche =  substract(centreEcran, scale(yDir,hauteurEcran),pointGauche);
+    var coinSupGauche = substract(pointGauche, scale(xDir,hauteurEcran*ratio));
+
+    var unitX = (2.0*hauteurEcran/height);
+    var unitY = (2.0*hauteurEcran/width*ratio);
+    // Pour chacun des pixels
+    var image = new Float32Array(3 * width * height);
+    for (var x = 0; x < width; x++) 
+    {
+        for (var y = 0; y < height; y++) 
+        {
+            var color = Vector(0.0,0.0,0.0)
+            
+            var ydis = scale(yDir,y*unitX);
+            var xdis = scale(xDir,x*unitY);
+
+            var displacement = addV(xdis,ydis);
+            var point = addV(coinSupGauche,displacement);
+            
+            var direction = substract(point,cameraPos);
+            for(var sample = 0; sample < samples; sample++ )
+            {
+                // On crée le rayon associé
+                var colorVal = shade(traceRay(Ray(cameraPos, direction)),maxPathSize-1)
+                color = addV(color, colorVal) 
+            }
+
+            color = scale(color, 1.0/(samples))
+            SetPixelColor(image, color.val, x, y);
+        }
+    }
+    // Création du canvas
+    var canvas = document.createElement( "canvas" );
+    canvas.width = width;
+    canvas.height = height;
+    document.body.appendChild( canvas );
+
+    // Contexte  graphique
+    var context2D = canvas.getContext("2d");
+    var imgData = context2D.getImageData(0, 0, width, height);
+
+    // Conversion en int
+    for(var i = 0, j = 0, k = 0; i < width * height; i++)
+    {
+        imgData.data[ j++ ] = toneMap(image[k++]);
+        imgData.data[ j++ ] = toneMap(image[k++]);
+        imgData.data[ j++ ] = toneMap(image[k++]);
+        imgData.data[ j++ ] = 255; // alpha = 1, always
+    }
+    // Affichage du resultat
+    context2D.putImageData(imgData, 0, 0);
+}
+</script>
+</head>
+
+<body onload="main();">
+</body>
+
+</html>
